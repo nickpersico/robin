@@ -68,7 +68,10 @@ class Queue(db.Model):
 
     rotation = db.relationship("Rotation", back_populates="queues")
     assignment_logs = db.relationship(
-        "AssignmentLog", back_populates="queue", lazy="dynamic"
+        "AssignmentLog",
+        back_populates="queue",
+        cascade="all, delete-orphan",
+        lazy="dynamic",
     )
 
     @property
