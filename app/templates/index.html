@@ -7,7 +7,9 @@
   {# ── ROTATIONS DASHBOARD ── #}
   <div class="page-header">
     <h1>Groups</h1>
-    <a href="{{ url_for('rotations.create_rotation') }}" class="btn btn-primary">+ New group</a>
+    {% if current_user.is_active_user %}
+      <a href="{{ url_for('rotations.create_rotation') }}" class="btn btn-primary">+ New group</a>
+    {% endif %}
   </div>
 
   {% if rotations %}
@@ -52,9 +54,11 @@
     <div class="card" style="text-align:center; padding:3.5rem 2rem;">
       <p style="font-size:1.1rem; font-weight:500; color:var(--text-secondary); margin:0 0 .5rem;">No groups yet</p>
       <p class="text-muted" style="margin:0 0 1.25rem;">Create your first group to start automatically assigning leads in Close.</p>
-      <a href="{{ url_for('rotations.create_rotation') }}" class="btn btn-primary">
-        Create a group
-      </a>
+      {% if current_user.is_active_user %}
+        <a href="{{ url_for('rotations.create_rotation') }}" class="btn btn-primary">
+          Create a group
+        </a>
+      {% endif %}
     </div>
   {% endif %}
 
