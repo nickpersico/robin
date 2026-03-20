@@ -94,7 +94,7 @@ fly secrets set \
   SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
   CLOSE_CLIENT_ID="your_close_client_id" \
   CLOSE_CLIENT_SECRET="your_close_client_secret" \
-  CLOSE_REDIRECT_URI="https://robin.fly.dev/auth/callback"
+  CLOSE_REDIRECT_URI="https://robin-closekit.fly.dev/auth/callback"
 
 # 4. Deploy
 fly deploy
@@ -116,7 +116,7 @@ flask make-admin your@email.com
 fly certs add robin.yourdomain.com
 ```
 
-Then add a CNAME record pointing to `robin.fly.dev` and update `CLOSE_REDIRECT_URI` in your Close OAuth app settings and in Fly secrets.
+Then add a CNAME record pointing to `robin-closekit.fly.dev` and update `CLOSE_REDIRECT_URI` in your Close OAuth app settings and in Fly secrets.
 
 ## Environment variables
 

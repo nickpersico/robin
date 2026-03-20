@@ -1,4 +1,4 @@
-app = 'robin'
+app = 'robin-closekit'
 primary_region = 'iad'
 
 [build]
