@@ -42,9 +42,9 @@
 
     {# Pending read-only notice #}
     {% if current_user.is_pending %}
-      <div style="margin:0 0 .75rem; padding:.55rem .75rem; background:rgba(251,191,36,.15); border:1px solid rgba(251,191,36,.4); border-radius:6px; font-size:.75rem; color:#92400e; line-height:1.4;">
-        <strong>Pending approval</strong><br>
-        Read-only until an admin approves your account.
+      <div style="margin:0 0 .75rem; padding:.55rem .75rem; background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.35); border-radius:6px; font-size:.75rem; line-height:1.4;">
+        <strong style="color:#fcd34d;">Pending approval</strong><br>
+        <span style="color:#c4a97a;">Read-only until an admin approves your account.</span>
       </div>
     {% endif %}
 
