@@ -230,7 +230,7 @@
 (function () {
   // ── State ──────────────────────────────────────────────────────────────
   var sort = 'desc';
-  var cursor = null;
+  var nextOffset = 0;
   var loading = false;
   var hasMore = true;
 
@@ -294,7 +294,7 @@
     var q = document.getElementById('filter-search').value.trim();
     if (q) p.set('search', q);
 
-    if (cursor) p.set('cursor', cursor);
+    if (nextOffset) p.set('offset', nextOffset);
     return p;
   }
 
@@ -330,7 +330,7 @@
         });
 
         hasMore = data.has_more;
-        cursor = data.next_cursor;
+        nextOffset = data.next_offset || 0;
 
         // Show/hide states
         emptyEl.style.display = (data.total === 0) ? 'block' : 'none';
@@ -350,7 +350,7 @@
   }
 
   function reset() {
-    cursor = null;
+    nextOffset = 0;
     hasMore = true;
     tbody.innerHTML = '';
     emptyEl.style.display = 'none';

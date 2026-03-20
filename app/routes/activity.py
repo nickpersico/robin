@@ -144,53 +144,23 @@ def api():
     query = _base_query()
     query, sort = _apply_filters(query)
 
-    # Total count (before cursor/limit)
+    # Total count (before pagination)
     total = query.count()
 
-    # Cursor-based pagination using a composite (assigned_at, id) cursor so that
-    # records sharing the same timestamp don't cause skipped rows or infinite loops.
-    cursor = request.args.get("cursor")
+    # Offset-based pagination — simple and reliable even when many records share
+    # the same timestamp (common during bulk queue checks).
+    offset = request.args.get("offset", 0, type=int)
     limit = request.args.get("limit", 25, type=int)
     limit = min(limit, 100)  # cap
 
-    cursor_ts = None
-    cursor_id = None
-    if cursor:
-        try:
-            ts_part, id_part = cursor.split("|", 1)
-            cursor_ts = datetime.fromisoformat(ts_part)
-            cursor_id = id_part
-        except (ValueError, AttributeError):
-            pass  # malformed cursor — ignore and start from the beginning
+    order = (
+        AssignmentLog.assigned_at.asc()
+        if sort == "asc"
+        else AssignmentLog.assigned_at.desc()
+    )
 
-    if sort == "asc":
-        order = (AssignmentLog.assigned_at.asc(), AssignmentLog.id.asc())
-        if cursor_ts and cursor_id:
-            query = query.filter(
-                db.or_(
-                    AssignmentLog.assigned_at > cursor_ts,
-                    db.and_(
-                        AssignmentLog.assigned_at == cursor_ts,
-                        AssignmentLog.id > cursor_id,
-                    ),
-                )
-            )
-    else:
-        order = (AssignmentLog.assigned_at.desc(), AssignmentLog.id.desc())
-        if cursor_ts and cursor_id:
-            query = query.filter(
-                db.or_(
-                    AssignmentLog.assigned_at < cursor_ts,
-                    db.and_(
-                        AssignmentLog.assigned_at == cursor_ts,
-                        AssignmentLog.id < cursor_id,
-                    ),
-                )
-            )
-
-    rows = query.order_by(*order).limit(limit + 1).all()
-    has_more = len(rows) > limit
-    rows = rows[:limit]
+    rows = query.order_by(order).offset(offset).limit(limit).all()
+    has_more = (offset + len(rows)) < total
 
     items = []
     for log in rows:
@@ -206,14 +176,9 @@ def api():
             "rotation_id": log.queue.rotation.id,
         })
 
-    next_cursor = None
-    if has_more and rows:
-        last = rows[-1]
-        next_cursor = f"{last.assigned_at.strftime('%Y-%m-%dT%H:%M:%S.%f')}|{last.id}"
-
     return jsonify({
         "items": items,
         "total": total,
         "has_more": has_more,
-        "next_cursor": next_cursor,
+        "next_offset": offset + len(rows) if has_more else None,
     })
