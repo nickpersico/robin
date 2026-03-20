@@ -16,7 +16,7 @@ class AssignmentLog(db.Model):
         db.String(20), db.ForeignKey("queues.id"), nullable=False, index=True
     )
     rotation_member_id = db.Column(
-        db.String(20), db.ForeignKey("rotation_members.id"), nullable=False, index=True
+        db.String(20), db.ForeignKey("rotation_members.id"), nullable=True, index=True
     )
 
     # Close Lead info (denormalized)
