@@ -410,6 +410,21 @@ body:not(.authenticated) .container { max-width: none; padding: 0; }
   color: var(--text-primary);
 }
 
+.landing-video {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto 2.5rem;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,.12);
+}
+.landing-video iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: none;
+}
+
 .btn-close-signin {
   display: inline-flex;
   align-items: center;
