@@ -4,6 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Robin{% endblock %} — the faithful distributor</title>
+
+  {# ── Open Graph / Slack unfurl ── #}
+  <meta property="og:site_name" content="Robin">
+  <meta property="og:title"       content="Robin — the faithful distributor">
+  <meta property="og:description" content="Round-robin lead assignment for Close CRM. Automatically distribute new leads across your team in fair rotation order.">
+  <meta property="og:type"        content="website">
+  <meta property="og:url"         content="https://robin.closekit.com">
+  <meta property="og:image"       content="https://robin.closekit.com/static/img/robin-logo.png">
+  <meta property="og:image:width"  content="512">
+  <meta property="og:image:height" content="512">
+  <meta property="og:image:alt"    content="Robin logo">
+
+  {# ── Twitter / X card ── #}
+  <meta name="twitter:card"        content="summary">
+  <meta name="twitter:title"       content="Robin — the faithful distributor">
+  <meta name="twitter:description" content="Round-robin lead assignment for Close CRM. Automatically distribute new leads across your team in fair rotation order.">
+  <meta name="twitter:image"       content="https://robin.closekit.com/static/img/robin-logo.png">
+
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/robin-logo.png') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
