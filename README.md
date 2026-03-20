@@ -94,7 +94,7 @@ fly secrets set \
   SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
   CLOSE_CLIENT_ID="your_close_client_id" \
   CLOSE_CLIENT_SECRET="your_close_client_secret" \
-  CLOSE_REDIRECT_URI="https://robin-closekit.fly.dev/auth/callback"
+  CLOSE_REDIRECT_URI="https://robin.closekit.com/auth/callback"
 
 # 4. Deploy
 fly deploy
