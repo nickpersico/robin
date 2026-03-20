@@ -81,7 +81,10 @@ class RotationMember(db.Model):
 
     rotation = db.relationship("Rotation", back_populates="members")
     assignment_logs = db.relationship(
-        "AssignmentLog", back_populates="rotation_member", lazy="dynamic"
+        "AssignmentLog",
+        back_populates="rotation_member",
+        lazy="dynamic",
+        passive_deletes=True,
     )
 
     __table_args__ = (
