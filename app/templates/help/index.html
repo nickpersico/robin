@@ -293,7 +293,7 @@
     <h3>Roles</h3>
     <ul>
       <li><strong>Admin</strong> — can create/edit/delete Groups and Lead Lists, manage team members, approve or suspend users, and access all data in the org.</li>
-      <li><strong>Member</strong> — can view Groups, Lead Lists, and the Activity Log, but cannot make changes.</li>
+      <li><strong>Member</strong> — can view Groups, Lead Lists, and the Activity Log, but cannot create, edit, or delete anything.</li>
     </ul>
     <p>
       The first person to sign in from a Close organization becomes that org's admin automatically.
@@ -358,9 +358,13 @@
     <h3 id="edge-new-users">New users joining an organization</h3>
     <p>
       When a new user from your Close org signs into Robin for the first time, their account
-      is created in a <span class="help-badge gray">Pending</span> state. They'll see a
-      "waiting for approval" screen and won't be able to access any Robin data until an
-      admin approves them.
+      is created in a <span class="help-badge gray">Pending</span> state. Pending users have
+      <strong>read-only access</strong> — they can browse Groups, Lead Lists, and the Activity
+      Log, but cannot create, edit, or delete anything until an admin approves them.
+    </p>
+    <p>
+      A yellow <strong>Pending approval</strong> notice appears in the sidebar to remind
+      the user of their read-only status.
     </p>
     <p>
       Admins will see a red badge on the <strong>Team</strong> link in the sidebar footer

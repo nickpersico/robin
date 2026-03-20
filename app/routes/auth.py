@@ -145,7 +145,7 @@ def callback():
 
     # ── 6. Route based on status ──────────────────────────────────────────────
     if user.is_pending:
-        return redirect(url_for("auth.pending"))
+        flash("Welcome to Robin! Your account is pending approval from an admin — you have read-only access in the meantime.", "info")
 
     if user.is_suspended:
         logout_user()

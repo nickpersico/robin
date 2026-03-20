@@ -27,6 +27,7 @@
       {% endif %}
     </div>
   </div>
+  {% if current_user.is_active_user %}
   <div style="display:flex; align-items:center; gap:.5rem;">
     {# Pause — direct submit #}
     {% if queue.status == 'active' %}
@@ -53,6 +54,7 @@
       </button>
     </form>
   </div>
+  {% endif %}
 </div>
 
 {# ── Status banner ── #}
@@ -116,7 +118,7 @@
           {% else %}
             <span style="font-size:.875rem; color:#6b7280;">Not yet checked</span>
           {% endif %}
-          {% if queue.status == 'active' %}
+          {% if current_user.is_active_user and queue.status == 'active' %}
             <button type="button" class="btn btn-outline btn-sm"
                     onclick="checkNow(this, '{{ url_for('queues.check_queue', rotation_id=rotation.id, queue_id=queue.id) }}')">
               Check now

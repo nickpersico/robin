@@ -57,21 +57,31 @@ def create_app(config_class=Config):
         return {"user_orgs": []}
 
     # ── Status gate ──────────────────────────────────────────────────────────
-    # Redirect pending users to the waiting room; log out suspended users.
-    _STATUS_WHITELIST = {"auth.pending", "auth.logout", "main.index", "static", "help.index", "legal.terms", "legal.privacy"}
+    # Pending users have read-only access: they can view all pages but cannot
+    # create, edit, or delete anything until approved by an admin.
+    # Suspended users are logged out immediately.
+    _PENDING_BLOCKED_ENDPOINTS = {
+        "rotations.create_rotation",
+        "rotations.edit_rotation",
+        "rotations.delete_rotation",
+        "queues.create_queue",
+        "queues.edit_queue",
+        "queues.delete_queue",
+        "queues.toggle_queue",
+        "queues.check_queue",
+    }
 
     @app.before_request
     def check_user_status():
         if not current_user.is_authenticated:
             return
         endpoint = getattr(request, "endpoint", None)
-        if endpoint in _STATUS_WHITELIST:
-            return
-        if current_user.is_pending:
-            return redirect(url_for("auth.pending"))
         if current_user.is_suspended:
             logout_user()
             flash("Your Robin access has been suspended.", "error")
+            return redirect(url_for("main.index"))
+        if current_user.is_pending and endpoint in _PENDING_BLOCKED_ENDPOINTS:
+            flash("Your account is pending approval — you have read-only access until an admin approves you.", "warning")
             return redirect(url_for("main.index"))
 
     # ── Scheduler ────────────────────────────────────────────────────────────

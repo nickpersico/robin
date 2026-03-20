@@ -9,6 +9,7 @@
       <p class="text-muted" style="margin:0;">{{ rotation.description }}</p>
     {% endif %}
   </div>
+  {% if current_user.is_active_user %}
   <div class="flex gap-2 items-center">
     <a href="{{ url_for('rotations.edit_rotation', rotation_id=rotation.id) }}" class="btn btn-outline btn-sm btn-header">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
@@ -30,6 +31,7 @@
       </button>
     </form>
   </div>
+  {% endif %}
 </div>
 
 {# Members #}
@@ -82,7 +84,9 @@
 <div class="card">
   <div class="card-header">
     <h3>Lead Lists</h3>
-    <a href="{{ url_for('queues.create_queue', rotation_id=rotation.id) }}" class="btn btn-primary btn-sm">+ New lead list</a>
+    {% if current_user.is_active_user %}
+      <a href="{{ url_for('queues.create_queue', rotation_id=rotation.id) }}" class="btn btn-primary btn-sm">+ New lead list</a>
+    {% endif %}
   </div>
 
   {% if queues %}
@@ -126,14 +130,14 @@
             {% endif %}
           </td>
           <td style="text-align:right; white-space:nowrap;">
-            {% if queue.status == 'active' %}
+            {% if current_user.is_active_user and queue.status == 'active' %}
               <button type="button" class="btn btn-outline btn-sm"
                       onclick="checkNow(this, '{{ url_for('queues.check_queue', rotation_id=rotation.id, queue_id=queue.id) }}')"
                       style="margin-right:.35rem;">
                 Check now
               </button>
             {% endif %}
-            <a href="{{ url_for('queues.view_queue', rotation_id=rotation.id, queue_id=queue.id) }}" class="btn btn-outline btn-sm">Manage</a>
+            <a href="{{ url_for('queues.view_queue', rotation_id=rotation.id, queue_id=queue.id) }}" class="btn btn-outline btn-sm">View</a>
           </td>
         </tr>
         {% endfor %}
@@ -142,8 +146,10 @@
   {% else %}
     <p class="text-muted" style="margin:0;">
       No lead lists yet.
-      <a href="{{ url_for('queues.create_queue', rotation_id=rotation.id) }}">Create one</a>
-      to start assigning leads.
+      {% if current_user.is_active_user %}
+        <a href="{{ url_for('queues.create_queue', rotation_id=rotation.id) }}">Create one</a>
+        to start assigning leads.
+      {% endif %}
     </p>
   {% endif %}
 </div>
