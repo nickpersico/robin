@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+{% block title %}Help{% endblock %}
+
+{% block head %}
+<style>
+  .help-layout {
+    display: flex;
+    gap: 2.5rem;
+    align-items: flex-start;
+  }
+
+  /* Sticky anchor nav */
+  .help-toc {
+    flex: 0 0 200px;
+    position: sticky;
+    top: 2rem;
+    font-size: 0.82rem;
+  }
+  .help-toc-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin: 0 0 0.6rem;
+  }
+  .help-toc a {
+    display: block;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.25rem 0;
+    border-left: 2px solid var(--border);
+    padding-left: 0.75rem;
+    line-height: 1.4;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .help-toc a:hover,
+  .help-toc a.active {
+    color: var(--primary);
+    border-left-color: var(--primary);
+  }
+  .help-toc a.sub {
+    padding-left: 1.4rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .help-toc a.sub:hover,
+  .help-toc a.sub.active {
+    color: var(--primary);
+    border-left-color: var(--primary);
+  }
+
+  /* Main content */
+  .help-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .help-body h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 2.5rem 0 0.75rem;
+    padding-top: 0.25rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+  .help-body h2:first-child { margin-top: 0; }
+  .help-body h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 1.5rem 0 0.4rem;
+  }
+  .help-body p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    margin: 0 0 0.75rem;
+  }
+  .help-body ul, .help-body ol {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    margin: 0 0 0.75rem;
+    padding-left: 1.4rem;
+  }
+  .help-body li { margin-bottom: 0.25rem; }
+  .help-body li:last-child { margin-bottom: 0; }
+
+  .help-callout {
+    background: #fdf6f0;
+    border-left: 3px solid var(--primary);
+    border-radius: 0 6px 6px 0;
+    padding: 0.75rem 1rem;
+    margin: 0.75rem 0 1rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .help-callout strong { color: var(--text-primary); }
+
+  .help-callout.info {
+    background: #eff6ff;
+    border-left-color: #3b82f6;
+  }
+
+  .help-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    vertical-align: middle;
+    margin-left: 0.2rem;
+  }
+  .help-badge.green  { background: #d1fae5; color: #065f46; }
+  .help-badge.gray   { background: #f3f4f6; color: #4b5563; }
+  .help-badge.red    { background: #fee2e2; color: #991b1b; }
+  .help-badge.blue   { background: #dbeafe; color: #1e40af; }
+
+  @media (max-width: 768px) {
+    .help-layout { flex-direction: column; }
+    .help-toc { position: static; flex: none; width: 100%; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Help</h1>
+</div>
+
+<div class="help-layout">
+
+  {# ── Table of contents ── #}
+  <nav class="help-toc" id="help-toc">
+    <a href="#how-robin-works">How Robin works</a>
+    <a href="#groups">Groups</a>
+    <a href="#lead-lists">Lead Lists</a>
+    <a href="#assignment-engine">Assignment engine</a>
+    <a href="#activity-log">Activity Log</a>
+    <a href="#organizations">Organizations &amp; users</a>
+    <a href="#edge-cases">Common situations</a>
+    <a href="#edge-switching-orgs" class="sub">Switching organizations</a>
+    <a href="#edge-pause-resume" class="sub">Pausing &amp; resuming</a>
+    <a href="#edge-filter-change" class="sub">Changing filters</a>
+    <a href="#edge-new-users" class="sub">New users joining</a>
+    <a href="#edge-inactive-members" class="sub">Inactive members</a>
+    <a href="#edge-completed" class="sub">Completed lead lists</a>
+    <a href="#edge-failed" class="sub">Failed lead lists</a>
+    <a href="#support">Support</a>
+  </nav>
+
+  {# ── Body ── #}
+  <div class="help-body">
+
+    {# ── How Robin works ── #}
+    <h2 id="how-robin-works">How Robin works</h2>
+    <p>
+      Robin connects to your Close CRM organization and automatically assigns leads
+      to your team members in a fair, round-robin order. You define <strong>Groups</strong>
+      (who's in the rotation and in what order) and <strong>Lead Lists</strong>
+      (which leads should be assigned). Robin then polls your Close account every
+      five minutes and assigns any new leads it finds to the next person in line.
+    </p>
+    <p>
+      The assignment cycle is: <strong>Lead List → find unassigned leads → assign to next Group member → advance the pointer → repeat.</strong>
+      Every assignment is recorded in the Activity Log so you always have a full audit trail.
+    </p>
+
+    {# ── Groups ── #}
+    <h2 id="groups">Groups</h2>
+    <p>
+      A Group is an ordered list of Close users who will receive leads in turn.
+      Think of it as the roster for a particular team or territory.
+    </p>
+
+    <h3>Members</h3>
+    <p>
+      Each member maps to a Close user (looked up by their Close user ID or email).
+      Members have two states:
+    </p>
+    <ul>
+      <li><span class="help-badge green">Active</span> — eligible to receive the next lead.</li>
+      <li><span class="help-badge gray">Inactive</span> — skipped entirely; does not advance the round-robin pointer.</li>
+    </ul>
+    <p>
+      You can toggle a member's status at any time on the Group edit page.
+      Only active members count toward the rotation order.
+    </p>
+
+    <h3>Next up</h3>
+    <p>
+      The Group detail page shows which member is <span class="help-badge blue">Next up</span> —
+      the person who will receive the very next lead assigned by any Lead List in this Group.
+      The pointer advances automatically after each assignment.
+    </p>
+
+    <h3>Leads assigned count</h3>
+    <p>
+      The "Leads Assigned" column on the Group detail page shows a lifetime count of how
+      many leads each member has received through Robin. This is a running total across
+      all Lead Lists in the Group and all time.
+    </p>
+
+    {# ── Lead Lists ── #}
+    <h2 id="lead-lists">Lead Lists</h2>
+    <p>
+      A Lead List defines <em>which</em> leads Robin should watch and assign. Each Lead List
+      belongs to exactly one Group and uses a Close saved-search filter to identify leads.
+    </p>
+
+    <h3>Filters</h3>
+    <p>
+      The filter field accepts a Close Advanced Filter JSON object — the same query format
+      Close uses internally for its search. You can build your filter in Close's search UI
+      and paste the resulting query JSON into Robin. Robin passes this filter directly to
+      the Close API to find matching leads.
+    </p>
+    <div class="help-callout">
+      <strong>Tip:</strong> Robin will accept either the full search payload
+      (<code>{"limit": ..., "query": {...}}</code>) or just the inner query object
+      (<code>{"type": "and", "queries": [...]}</code>). It extracts the relevant part
+      automatically.
+    </div>
+
+    <h3>Statuses</h3>
+    <ul>
+      <li><span class="help-badge green">Active</span> — Robin polls this list every 5 minutes and assigns new leads.</li>
+      <li><span class="help-badge gray">Paused</span> — Polling is suspended. No leads will be assigned until you resume.</li>
+      <li><span class="help-badge gray">Completed</span> — All leads matching the filter have been assigned. Robin stops polling automatically.</li>
+      <li><span class="help-badge red">Failed</span> — An error occurred during the last poll (e.g. an expired Close API token or invalid filter). Check the Lead List detail page for details, fix the issue, and resume.</li>
+    </ul>
+
+    <h3>Seeding</h3>
+    <p>
+      When a Lead List is first activated (or re-activated after a filter change or resume),
+      Robin performs a <strong>seed</strong> step. It fetches all leads currently matching
+      the filter and marks them as "already seen" — so only leads that appear <em>after</em>
+      that moment will be assigned. This prevents Robin from retroactively assigning leads
+      that were in Close before you set up the list.
+    </p>
+
+    {# ── Assignment engine ── #}
+    <h2 id="assignment-engine">Assignment engine</h2>
+    <p>
+      Robin's background scheduler runs every <strong>5 minutes</strong> and checks every
+      active Lead List across all organizations. For each list, it:
+    </p>
+    <ol>
+      <li>Queries Close for leads matching the filter that were created or updated after the last check.</li>
+      <li>Compares those leads against already-assigned records to find new ones.</li>
+      <li>For each new lead, assigns it to the next active Group member in order.</li>
+      <li>Updates the Close lead record with the assigned owner via the Close API.</li>
+      <li>Logs the assignment to the Activity Log.</li>
+      <li>Advances the round-robin pointer to the next active member.</li>
+      <li>Updates <strong>Last Checked</strong> timestamp on the Lead List.</li>
+    </ol>
+    <p>
+      You can also trigger an immediate check using the <strong>Check now</strong> button
+      on the Group detail page — this runs the same logic outside of the 5-minute schedule.
+    </p>
+
+    {# ── Activity Log ── #}
+    <h2 id="activity-log">Activity Log</h2>
+    <p>
+      The Activity Log is a complete, time-ordered record of every lead assignment Robin
+      has made for your organization. It shows:
+    </p>
+    <ul>
+      <li><strong>When</strong> — the exact date and time of assignment, in your local timezone, with a relative "ago" label.</li>
+      <li><strong>Lead</strong> — the Close lead name, linking directly to that lead in Close.</li>
+      <li><strong>Assigned To</strong> — the Close user who received the lead.</li>
+      <li><strong>Lead List</strong> — which Lead List triggered the assignment.</li>
+      <li><strong>Group</strong> — which Group the Lead List belongs to.</li>
+    </ul>
+    <p>
+      You can filter by timeframe, Group, Lead List, or assigned user, and search by lead name
+      or lead ID. The log is infinite-scrolling and loads 25 records at a time.
+    </p>
+
+    {# ── Organizations & users ── #}
+    <h2 id="organizations">Organizations &amp; users</h2>
+
+    <h3>Sign in</h3>
+    <p>
+      Robin uses Close's OAuth 2.0 flow for authentication — there are no separate Robin
+      passwords. Clicking "Sign in with Close" redirects you to Close, where you authorize
+      Robin to access your account. Once authorized, you're returned to Robin and your
+      Close organization is linked automatically.
+    </p>
+
+    <h3>Roles</h3>
+    <ul>
+      <li><strong>Admin</strong> — can create/edit/delete Groups and Lead Lists, manage team members, approve or suspend users, and access all data in the org.</li>
+      <li><strong>Member</strong> — can view Groups, Lead Lists, and the Activity Log, but cannot make changes.</li>
+    </ul>
+    <p>
+      The first person to sign in from a Close organization becomes that org's admin automatically.
+      Additional admins can be promoted from the Team page.
+    </p>
+
+    <h3>Team management</h3>
+    <p>
+      Admins can access the <strong>Team</strong> page from the sidebar footer. From there
+      you can see all users in your org, change their role, and approve or suspend access.
+    </p>
+
+    {# ── Edge cases ── #}
+    <h2 id="edge-cases">Common situations</h2>
+
+    <h3 id="edge-switching-orgs">Switching organizations</h3>
+    <p>
+      If your Close account belongs to multiple organizations (e.g. you're an admin of a
+      client's org as well as your own), Robin creates a separate user record for each org.
+      The org switcher in the sidebar footer lets you toggle between them.
+    </p>
+    <div class="help-callout">
+      All data — Groups, Lead Lists, assignments, and Activity Log entries — is fully
+      scoped to each organization. Switching orgs gives you a completely separate Robin
+      workspace. Nothing is shared across organizations.
+    </div>
+    <p>
+      To add another organization: open the org switcher and click <strong>+ Add another
+      organization</strong>. This starts a fresh OAuth flow with Close, and you can
+      authorize a different org on the Close side.
+    </p>
+
+    <h3 id="edge-pause-resume">Pausing and resuming a Lead List</h3>
+    <p>
+      Pausing a Lead List immediately stops Robin from polling it. Any leads that arrived
+      while the list was paused will not be retroactively assigned.
+    </p>
+    <p>
+      When you resume a paused list, Robin runs a fresh <strong>seed</strong>: it fetches
+      all leads currently matching the filter and marks them as already seen. Polling then
+      continues from that point forward — only leads that appear <em>after</em> the resume
+      moment will be assigned.
+    </p>
+    <div class="help-callout">
+      <strong>In practice:</strong> if your list was paused for two days and 50 leads came
+      in during that time, those 50 leads will <em>not</em> be assigned when you resume.
+      Resume is always a fresh start from the current state of Close.
+    </div>
+
+    <h3 id="edge-filter-change">Changing the filter on an active Lead List</h3>
+    <p>
+      Saving a new filter on an active Lead List triggers an automatic re-seed. Robin
+      discards the old seen-lead set, fetches all leads currently matching the new filter,
+      marks them as seen, and then polls going forward. This prevents a filter change from
+      suddenly causing a flood of existing leads to be assigned.
+    </p>
+    <p>
+      Robin shows a confirmation dialog when you save filter changes on an active or paused
+      list so you're always aware this re-seed will happen.
+    </p>
+
+    <h3 id="edge-new-users">New users joining an organization</h3>
+    <p>
+      When a new user from your Close org signs into Robin for the first time, their account
+      is created in a <span class="help-badge gray">Pending</span> state. They'll see a
+      "waiting for approval" screen and won't be able to access any Robin data until an
+      admin approves them.
+    </p>
+    <p>
+      Admins will see a red badge on the <strong>Team</strong> link in the sidebar footer
+      showing the number of pending users. Go to Team → find the pending user → set their
+      role and approve them.
+    </p>
+    <div class="help-callout info">
+      Newly approved users are <em>not</em> automatically added to any Groups. An admin
+      needs to manually add them as Group members with the appropriate position in the
+      rotation order.
+    </div>
+
+    <h3 id="edge-inactive-members">Setting a member to inactive</h3>
+    <p>
+      Marking a Group member as <span class="help-badge gray">Inactive</span> removes them
+      from the rotation immediately. The next assignment will go to the next active member
+      in order — the round-robin pointer is not reset.
+    </p>
+    <p>
+      When you reactivate a member, they re-enter the rotation at their original position.
+      They will receive the next lead when the pointer cycles back to their position.
+      No leads are retroactively redistributed.
+    </p>
+
+    <h3 id="edge-completed">Completed Lead Lists</h3>
+    <p>
+      A Lead List moves to <span class="help-badge gray">Completed</span> automatically when
+      Robin runs a poll and finds no unassigned leads matching the filter. This typically
+      means every lead in the filtered set has already been assigned.
+    </p>
+    <p>
+      A completed list stops polling. If new leads are later added to Close that would match
+      the filter, they won't be picked up unless you manually resume the list (which
+      triggers a re-seed as described above).
+    </p>
+
+    <h3 id="edge-failed">Failed Lead Lists</h3>
+    <p>
+      A Lead List enters <span class="help-badge red">Failed</span> state if an unrecoverable
+      error occurs during a poll — most commonly an expired Close API token, an invalid
+      filter, or a Close API outage.
+    </p>
+    <p>To recover:</p>
+    <ol>
+      <li>Check the Lead List detail page for the specific error message.</li>
+      <li>Fix the underlying issue (re-authorize Robin with Close, correct the filter JSON, etc.).</li>
+      <li>Click <strong>Resume</strong> on the Lead List detail page. Robin will re-seed and resume polling.</li>
+    </ol>
+
+    {# ── Support ── #}
+    <h2 id="support">Support</h2>
+    <p>
+      Robin is an independent tool and is not officially affiliated with or supported by Close.
+      For help with any issues, questions, or feedback, email
+      <a href="mailto:nick@closekit.com">nick@closekit.com</a>.
+    </p>
+    <p>
+      <a href="{{ url_for('legal.terms') }}">Terms of Service</a>
+      &nbsp;·&nbsp;
+      <a href="{{ url_for('legal.privacy') }}">Privacy Policy</a>
+    </p>
+
+  </div>{# end .help-body #}
+</div>{# end .help-layout #}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Highlight the active TOC link as the user scrolls
+(function () {
+  var toc = document.getElementById('help-toc');
+  if (!toc) return;
+
+  var headings = Array.prototype.slice.call(
+    document.querySelectorAll('.help-body h2[id], .help-body h3[id]')
+  );
+  var links = toc.querySelectorAll('a[href^="#"]');
+
+  function getActive() {
+    var scrollY = window.scrollY + 100; // offset for top bar
+    var active = null;
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].offsetTop <= scrollY) {
+        active = headings[i].id;
+      }
+    }
+    return active;
+  }
+
+  function update() {
+    var id = getActive();
+    links.forEach(function (a) {
+      var href = a.getAttribute('href').slice(1);
+      a.classList.toggle('active', href === id);
+    });
+  }
+
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+})();
+</script>
+{% endblock %}

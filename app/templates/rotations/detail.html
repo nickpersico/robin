@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}{{ rotation.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 style="margin-bottom:.2rem;">{{ rotation.name }}</h1>
+    {% if rotation.description %}
+      <p class="text-muted" style="margin:0;">{{ rotation.description }}</p>
+    {% endif %}
+  </div>
+  <div class="flex gap-2 items-center">
+    <a href="{{ url_for('rotations.edit_rotation', rotation_id=rotation.id) }}" class="btn btn-outline btn-sm btn-header">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Edit
+    </a>
+    <form method="post" action="{{ url_for('rotations.delete_rotation', rotation_id=rotation.id) }}"
+          onsubmit="return confirm('Delete this group and all its lead lists? This cannot be undone.');" style="margin:0;">
+      <button type="submit" class="btn btn-outline btn-sm btn-header" title="Delete group"
+              style="color:var(--danger); border-color:#e8b8b0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+</div>
+
+{# Members #}
+<div class="card">
+  <div class="card-header">
+    <h3>Members</h3>
+    <span class="text-muted">{{ rotation.members | length }} total</span>
+  </div>
+
+  {% if rotation.members %}
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th style="text-align:right">Leads Assigned</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for member in rotation.members %}
+        <tr {% if rotation.next_member() and rotation.next_member().id == member.id %}style="background:#eff6ff"{% endif %}>
+          <td>{{ loop.index }}</td>
+          <td>
+            {{ member.close_user_name or '—' }}
+            {% if rotation.next_member() and rotation.next_member().id == member.id %}
+              <span class="badge badge-blue ml-1">Next up</span>
+            {% endif %}
+          </td>
+          <td class="text-muted">{{ member.close_user_email or '—' }}</td>
+          <td style="text-align:right">{{ member_counts.get(member.id, 0) }}</td>
+          <td>
+            {% if member.is_active %}
+              <span class="badge badge-green">Active</span>
+            {% else %}
+              <span class="badge badge-gray">Inactive</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-muted">No members yet. <a href="{{ url_for('rotations.edit_rotation', rotation_id=rotation.id) }}">Add members</a>.</p>
+  {% endif %}
+</div>
+
+{# Queues #}
+<div class="card">
+  <div class="card-header">
+    <h3>Lead Lists</h3>
+    <a href="{{ url_for('queues.create_queue', rotation_id=rotation.id) }}" class="btn btn-primary btn-sm">+ New lead list</a>
+  </div>
+
+  {% if queues %}
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Status</th>
+          <th>Last Checked</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for queue in queues %}
+        <tr>
+          <td>
+            <a href="{{ url_for('queues.view_queue', rotation_id=rotation.id, queue_id=queue.id) }}">
+              {{ queue.name }}
+            </a>
+          </td>
+          <td>
+            {% if queue.status == 'active' %}
+              <span class="badge badge-green">Active</span>
+            {% elif queue.status == 'paused' %}
+              <span class="badge badge-gray">Paused</span>
+            {% elif queue.status == 'completed' %}
+              <span class="badge badge-gray">Completed</span>
+            {% elif queue.status == 'failed' %}
+              <span class="badge badge-red">Failed</span>
+            {% else %}
+              <span class="badge badge-gray">{{ queue.status }}</span>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;">
+            {% if queue.last_checked_at %}
+              <span class="local-datetime" data-utc="{{ queue.last_checked_at.strftime('%Y-%m-%dT%H:%M:%S') }}Z">
+                {{ queue.last_checked_at.strftime('%b %d, %Y %-I:%M%p') }}
+              </span>
+            {% else %}
+              <span class="text-muted">Never</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right; white-space:nowrap;">
+            {% if queue.status == 'active' %}
+              <button type="button" class="btn btn-outline btn-sm"
+                      onclick="checkNow(this, '{{ url_for('queues.check_queue', rotation_id=rotation.id, queue_id=queue.id) }}')"
+                      style="margin-right:.35rem;">
+                Check now
+              </button>
+            {% endif %}
+            <a href="{{ url_for('queues.view_queue', rotation_id=rotation.id, queue_id=queue.id) }}" class="btn btn-outline btn-sm">Manage</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-muted" style="margin:0;">
+      No lead lists yet.
+      <a href="{{ url_for('queues.create_queue', rotation_id=rotation.id) }}">Create one</a>
+      to start assigning leads.
+    </p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "queues/_check_now_js.html" %}
+<script>
+(function () {
+  function timeAgo(date) {
+    var secs = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (secs < 60)  return 'just now';
+    var mins = Math.floor(secs / 60);
+    if (mins < 60)  return mins + ' minute' + (mins === 1 ? '' : 's') + ' ago';
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24)   return hrs + ' hour' + (hrs === 1 ? '' : 's') + ' ago';
+    var days = Math.floor(hrs / 24);
+    return days + ' day' + (days === 1 ? '' : 's') + ' ago';
+  }
+
+  function formatLocalDateTime(iso) {
+    var d = new Date(iso);
+    var opts = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
+    return d.toLocaleString(undefined, opts);
+  }
+
+  document.querySelectorAll('.local-datetime').forEach(function (el) {
+    var d = new Date(el.dataset.utc);
+    el.textContent = formatLocalDateTime(el.dataset.utc) + '  (' + timeAgo(d) + ')';
+  });
+})();
+</script>
+{% endblock %}

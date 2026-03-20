@@ -1,0 +1,69 @@
+{# ── Filter help modal ──────────────────────────────────────────────────────
+   Include this partial anywhere you need the "Show me how" link + modal.
+   The modal is rendered once; multiple includes on a page won't duplicate it
+   because the JS checks for the element before inserting.
+#}
+
+{# Trigger link — inline, sits right above the textarea #}
+<button type="button" onclick="document.getElementById('filter-help-modal').showModal()"
+        style="background:none; border:none; padding:0; margin:0 0 .5rem;
+               font-size:.82rem; color:#2563eb; cursor:pointer; text-decoration:underline;
+               text-underline-offset:2px;">
+  Show me how to get the filter JSON from Close →
+</button>
+
+{# Modal #}
+<dialog id="filter-help-modal"
+        style="border:none; border-radius:12px; padding:0; max-width:680px; width:100%;
+               box-shadow:0 20px 60px rgba(0,0,0,.25); background:#fff;">
+  <div style="padding:1.5rem 1.75rem 1.25rem; border-bottom:1px solid #e5e7eb;
+              display:flex; align-items:center; justify-content:space-between;">
+    <h2 style="margin:0; font-size:1.1rem;">How to copy filter JSON from Close</h2>
+    <button type="button" onclick="document.getElementById('filter-help-modal').close()"
+            style="background:none; border:none; cursor:pointer; padding:.25rem; color:#6b7280;
+                   border-radius:6px; line-height:1;" title="Close">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <div style="padding:1.25rem 1.75rem 1.75rem;">
+    {# Video #}
+    <video controls style="width:100%; border-radius:8px; background:#000; margin-bottom:1.5rem; max-height:320px;">
+      <source src="{{ url_for('static', filename='video/copy-json-filters.mp4') }}" type="video/mp4">
+      Your browser does not support the video tag.
+    </video>
+
+    {# Steps #}
+    <ol style="margin:0; padding:0 0 0 1.25rem; display:flex; flex-direction:column; gap:.75rem; font-size:.9rem; line-height:1.55;">
+      <li>
+        Navigate to <a href="https://app.close.com/leads" target="_blank" rel="noopener" style="color:#2563eb;">Leads in Close</a>.
+      </li>
+      <li>
+        Add the filter conditions you want Robin to look for. We recommend including a condition where
+        the User Custom Field you're using to assign leads is set to <strong>"not present"</strong> —
+        so only unassigned leads get picked up.
+      </li>
+      <li>
+        Once your filters are set, click the <strong>three-dots (⋯) icon</strong> in the top-right menu
+        and select <strong>"Copy Filters (JSON)"</strong>.
+      </li>
+      <li>
+        Paste the copied JSON into the Lead filter field in Robin.
+      </li>
+    </ol>
+  </div>
+</dialog>
+
+<script>
+  // Close modal when clicking the backdrop
+  document.getElementById('filter-help-modal').addEventListener('click', function(e) {
+    const rect = this.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right ||
+        e.clientY < rect.top  || e.clientY > rect.bottom) {
+      this.close();
+    }
+  });
+</script>

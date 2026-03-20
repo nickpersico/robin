@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Team — {{ current_user.org_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Team</h1>
+  <span class="text-muted">{{ current_user.org_name }}</span>
+</div>
+
+{% set pending = org_users | selectattr('is_pending') | list %}
+{% if pending %}
+<div class="alert alert-info">
+  <strong>{{ pending | length }} user{{ 's' if pending | length != 1 }} pending approval.</strong>
+  Review them below and approve to grant access.
+</div>
+{% endif %}
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Joined</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in org_users %}
+      <tr>
+        <td>
+          {{ user.full_name }}
+          {% if user.id == current_user.id %}
+            <span class="badge badge-gray" style="font-size:.7rem;">You</span>
+          {% endif %}
+        </td>
+        <td class="text-muted">{{ user.email }}</td>
+        <td>
+          {% if user.is_admin %}
+            <span class="badge badge-blue">Admin</span>
+          {% else %}
+            <span class="badge badge-gray">Member</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if user.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+          {% elif user.status == 'pending' %}
+            <span class="badge badge-red">Pending</span>
+          {% elif user.status == 'suspended' %}
+            <span class="badge badge-gray">Suspended</span>
+          {% endif %}
+        </td>
+        <td class="text-muted">{{ user.created_at.strftime('%b %d, %Y') }}</td>
+        <td>
+          {% if user.id != current_user.id %}
+            <div style="display:flex; gap:.4rem; justify-content:flex-end;">
+              {# Approve pending #}
+              {% if user.is_pending %}
+                <form method="post" action="{{ url_for('admin.approve_user', user_id=user.id) }}">
+                  <button type="submit" class="btn btn-primary btn-sm">Approve</button>
+                </form>
+              {% endif %}
+              {# Suspend / reactivate #}
+              {% if user.status == 'active' %}
+                <form method="post" action="{{ url_for('admin.suspend_user', user_id=user.id) }}"
+                      onsubmit="return confirm('Suspend {{ user.full_name }}?');">
+                  <button type="submit" class="btn btn-outline btn-sm">Suspend</button>
+                </form>
+              {% elif user.is_suspended %}
+                <form method="post" action="{{ url_for('admin.reactivate_user', user_id=user.id) }}">
+                  <button type="submit" class="btn btn-outline btn-sm">Reactivate</button>
+                </form>
+              {% endif %}
+              {# Toggle role (only for active users) #}
+              {% if user.status == 'active' %}
+                <form method="post" action="{{ url_for('admin.toggle_role', user_id=user.id) }}"
+                      onsubmit="return confirm('Change {{ user.full_name }}\'s role to {{ 'Member' if user.is_admin else 'Admin' }}?');">
+                  <button type="submit" class="btn btn-outline btn-sm">
+                    Make {{ 'Member' if user.is_admin else 'Admin' }}
+                  </button>
+                </form>
+              {% endif %}
+            </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

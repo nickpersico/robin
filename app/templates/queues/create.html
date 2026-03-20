@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}New Lead List — {{ rotation.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="text-muted" style="margin:0 0 .2rem; font-size:.85rem;">
+      <a href="{{ url_for('rotations.view_rotation', rotation_id=rotation.id) }}">{{ rotation.name }}</a>
+    </p>
+    <h1>New Lead List</h1>
+  </div>
+  <a href="{{ url_for('rotations.view_rotation', rotation_id=rotation.id) }}" class="btn btn-outline btn-sm">Cancel</a>
+</div>
+
+{% if error %}
+  <div class="alert alert-warning">Could not load Close custom fields: {{ error }}</div>
+{% endif %}
+
+<form method="post">
+  <input type="hidden" name="queue_type" value="ongoing">
+
+  <div class="card">
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="name">Lead list name</label>
+      <input type="text" id="name" name="name" value="{{ request.form.get('name', '') }}" required
+             placeholder="e.g. Website Leads, Conference Leads">
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 .75rem;">Conditions</h3>
+    <div style="display:flex; align-items:flex-start; gap:.6rem; background:#eff6ff;
+                border:1px solid #bfdbfe; border-radius:8px; padding:.75rem 1rem; margin-bottom:1.25rem;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           style="flex-shrink:0; margin-top:.1rem;">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <p style="margin:0; font-size:.875rem; color:#1e40af; line-height:1.5;">
+        Robin will watch for <strong>new leads</strong> created in Close that match the filter below
+        and assign them as they come in. Leads that already exist in Close will not be assigned.
+      </p>
+    </div>
+
+    <div class="form-group">
+      <label for="filters_json">Lead filter <span class="text-muted">(JSON from Close)</span></label>
+      {% include "queues/_filter_help_modal.html" %}
+      <textarea id="filters_json" name="filters_json" rows="6" required
+                style="font-family: monospace; font-size: .85rem;"
+                placeholder='{"type":"and","queries":[]}'
+      >{{ request.form.get('filters_json', '') }}</textarea>
+      <p class="text-muted" style="font-size:.82rem; margin:.35rem 0 0;">
+        Paste the filter JSON from a Close Saved Search to define which leads are assigned.
+      </p>
+    </div>
+
+    <div class="form-group">
+      <label for="custom_field_id">User custom field</label>
+      {% if custom_fields %}
+        <select id="custom_field_id" name="custom_field_id">
+          <option value="">— Select a field —</option>
+          {% set selected_field = request.form.get('custom_field_id', '') %}
+          {% for field in custom_fields %}
+            <option value="{{ field.id }}" {% if field.id == selected_field %}selected{% endif %}>
+              {{ field.name }}
+            </option>
+          {% endfor %}
+        </select>
+        <p class="text-muted" style="font-size:.82rem; margin:.35rem 0 0;">
+          Robin will write the assigned user's ID into this field on the lead.
+        </p>
+      {% else %}
+        <p class="text-muted">
+          No User-type custom fields found in your Close org.
+          <a href="https://app.close.com/settings/custom-fields/" target="_blank" rel="noopener">Create one in Close</a> first.
+        </p>
+        <input type="hidden" name="custom_field_id" value="">
+      {% endif %}
+    </div>
+
+    <div class="form-group" style="margin-bottom:0;">
+      <label style="display:flex; align-items:flex-start; gap:.6rem; cursor:pointer; font-weight:normal;">
+        <input type="checkbox" name="overwrite_existing" value="1"
+               style="margin-top:.2rem; accent-color:#2563eb;"
+               {% if request.form.get('overwrite_existing') == '1' %}checked{% endif %}>
+        <span>
+          <strong style="font-weight:600;">Overwrite existing values</strong><br>
+          <span class="text-muted" style="font-size:.875rem;">
+            If the selected field already has a value on a lead, Robin will overwrite it.
+            When unchecked, leads with an existing value are skipped.
+          </span>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <div style="display:flex; justify-content:flex-end; gap:.75rem;">
+    <a href="{{ url_for('rotations.view_rotation', rotation_id=rotation.id) }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary">Create lead list</button>
+  </div>
+
+</form>
+{% endblock %}

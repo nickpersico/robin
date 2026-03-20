@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Robin{% endblock %} — the faithful distributor</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/robin-logo.png') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% if current_user.is_authenticated %}authenticated{% endif %}">
+
+{% if current_user.is_authenticated %}
+  {# ── MOBILE TOP BAR ── #}
+  <div class="mobile-topbar">
+    <div style="display:flex; align-items:center; gap:0.65rem;">
+      <button class="hamburger-btn" id="hamburger-btn" aria-label="Open menu">&#9776;</button>
+      <img src="{{ url_for('static', filename='img/robin-logo.png') }}" alt="" style="width:26px; height:26px; border-radius:6px;">
+      <span style="font-family:'Playfair Display',serif; font-weight:900; color:#fff; font-size:1.05rem;">Robin</span>
+    </div>
+  </div>
+
+  {# ── SIDEBAR OVERLAY (mobile) ── #}
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+{% endif %}
+
+<div class="app-layout">
+
+  {% if current_user.is_authenticated %}
+  {# ── LEFT SIDEBAR ── #}
+  <aside class="sidebar" id="sidebar">
+    {# Brand #}
+    <a href="{{ url_for('main.index') }}" class="sidebar-brand">
+      <img src="{{ url_for('static', filename='img/robin-logo.png') }}" alt="Robin">
+      <span>Robin</span>
+    </a>
+    <p class="sidebar-tagline">the faithful distributor</p>
+    <hr class="sidebar-divider">
+
+    {# Navigation #}
+    <nav class="sidebar-nav">
+      {% if current_user.is_active_user %}
+        <a href="{{ url_for('main.index') }}"
+           {% if request.endpoint in ('main.index', 'rotations.list_rotations') %}class="active"{% endif %}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Groups
+        </a>
+        <a href="{{ url_for('activity.index') }}"
+           {% if request.endpoint == 'activity.index' %}class="active"{% endif %}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Activity Log
+        </a>
+      {% endif %}
+    </nav>
+
+    {# Footer: org, team, sign out #}
+    <div class="sidebar-footer">
+      {# Org display / switcher #}
+      {% if user_orgs is defined and user_orgs %}
+      <div class="sidebar-org">
+        {% if user_orgs | length > 1 %}
+          {# Multiple orgs — show switcher dropdown #}
+          <div class="org-switcher">
+            <button type="button" class="org-switcher-btn">
+              <span style="overflow:hidden; text-overflow:ellipsis;">{{ current_user.org_name }}</span>
+              <span class="org-switcher-caret">&#9662;</span>
+            </button>
+            <div class="org-dropdown">
+              {% for u in user_orgs %}
+                <div class="org-dropdown-item {% if u.id == current_user.id %}is-current{% endif %}">
+                  <span>{{ u.org_name }}</span>
+                  {% if u.id == current_user.id %}
+                    <span style="font-size:.75rem; color:var(--text-muted);">Current</span>
+                  {% else %}
+                    <form method="post" action="{{ url_for('auth.switch_org', target_user_id=u.id) }}">
+                      <button type="submit">Switch</button>
+                    </form>
+                  {% endif %}
+                </div>
+              {% endfor %}
+              <a href="{{ url_for('auth.login') }}" class="org-dropdown-add">+ Add another organization</a>
+            </div>
+          </div>
+        {% else %}
+          {# Single org — just display the name #}
+          <div class="org-label">{{ current_user.org_name }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# Footer links #}
+      <div class="sidebar-footer-links">
+        {% if current_user.is_admin %}
+          <a href="{{ url_for('admin.users') }}"
+             {% if request.endpoint == 'admin.users' %}class="active"{% endif %}>
+            Team
+            {% if current_user.organization %}
+              {% set pending_count = current_user.organization.pending_count %}
+              {% if pending_count > 0 %}
+                <span class="badge badge-red" style="font-size:.6rem;">{{ pending_count }}</span>
+              {% endif %}
+            {% endif %}
+          </a>
+        {% endif %}
+        <a href="{{ url_for('help.index') }}"
+           {% if request.endpoint == 'help.index' %}class="active"{% endif %}>Help</a>
+        <a href="{{ url_for('auth.logout') }}">Sign out</a>
+      </div>
+    </div>
+  </aside>
+  {% endif %}
+
+  {# ── MAIN CONTENT ── #}
+  <main class="main-content">
+    <div class="container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+</div>
+
+{% block scripts %}{% endblock %}
+
+<script>
+// Disable a single button with an optional custom loading label.
+window._disableBtn = function (btn, text) {
+  btn.disabled = true;
+  btn.style.minWidth = btn.offsetWidth + 'px';
+  btn.textContent = text || 'Saving\u2026';
+};
+
+// Disable all submit buttons in a form. Buttons may set data-loading-text
+// to customise the label (falls back to "Saving…").
+window._disableSubmits = function (form) {
+  form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function (btn) {
+    window._disableBtn(btn, btn.dataset.loadingText || 'Saving\u2026');
+  });
+};
+
+// Global handler: fires whenever a form is actually submitted (not intercepted).
+document.addEventListener('submit', function (e) {
+  window._disableSubmits(e.target);
+});
+
+// Hamburger menu toggle (mobile)
+(function () {
+  var btn = document.getElementById('hamburger-btn');
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebar-overlay');
+  if (!btn || !sidebar) return;
+
+  btn.addEventListener('click', function () {
+    sidebar.classList.toggle('open');
+    if (overlay) overlay.classList.toggle('open');
+  });
+  if (overlay) {
+    overlay.addEventListener('click', function () {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+    });
+  }
+
+  // Close sidebar when clicking a nav link (mobile)
+  sidebar.querySelectorAll('.sidebar-nav a').forEach(function (link) {
+    link.addEventListener('click', function () {
+      sidebar.classList.remove('open');
+      if (overlay) overlay.classList.remove('open');
+    });
+  });
+})();
+</script>
+</body>
+</html>

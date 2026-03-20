@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Terms of Service{% endblock %}
+
+{% block head %}
+<style>
+  .legal-wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 2rem 0 4rem;
+  }
+  .legal-wrap h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 0.35rem;
+  }
+  .legal-effective {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0 0 2.5rem;
+  }
+  .legal-wrap section { margin-bottom: 1.75rem; }
+  .legal-wrap h2 {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 0.4rem;
+  }
+  .legal-wrap p, .legal-wrap li {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin: 0 0 0.5rem;
+  }
+  .legal-wrap ul {
+    padding-left: 1.4rem;
+    margin: 0 0 0.5rem;
+  }
+  .legal-wrap li { margin-bottom: 0.3rem; }
+  .legal-footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .legal-footer a { color: var(--text-muted); }
+  .legal-footer a:hover { color: var(--primary); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="legal-wrap">
+
+  <h1>Terms of Service</h1>
+  <p class="legal-effective">Effective date: March 19, 2026</p>
+
+  <section>
+    <h2>1. Agreement</h2>
+    <p>
+      By accessing or using Robin at
+      <a href="https://robin.closekit.com">robin.closekit.com</a>
+      (the "Service"), you agree to be bound by these Terms of Service. If you do not agree,
+      do not use the Service. The Service is operated by Nick Persico ("I", "me", or "my").
+    </p>
+  </section>
+
+  <section>
+    <h2>2. Description of Service</h2>
+    <p>
+      Robin is a round-robin lead assignment tool for Close CRM. It reads leads from your
+      Close account using filters you define, and automatically assigns them to members of
+      your team in rotation order. The Service is not officially affiliated with, endorsed by,
+      or supported by Close CRM.
+    </p>
+  </section>
+
+  <section>
+    <h2>3. Eligibility</h2>
+    <p>
+      You must have a valid Close CRM account to use the Service. By using the Service,
+      you represent that you have the authority to connect your Close account and to authorize
+      the Service to read and update lead data on your behalf.
+    </p>
+  </section>
+
+  <section>
+    <h2>4. Your Responsibilities</h2>
+    <ul>
+      <li>You are responsible for the accuracy of any group configurations, lead list filters, and rotation settings you provide.</li>
+      <li>You are responsible for ensuring your use of the Service complies with Close's terms of service.</li>
+      <li>You must not use the Service for any unlawful purpose or in a way that could harm others.</li>
+      <li>You are responsible for maintaining the security of your Close account credentials.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>5. Data Access</h2>
+    <p>
+      The Service accesses your Close account using OAuth 2.0. You may revoke this access
+      at any time through your Close account settings. Revoking access will stop Robin from
+      polling and assigning leads, but will not delete assignment history already recorded.
+    </p>
+  </section>
+
+  <section>
+    <h2>6. Availability</h2>
+    <p>
+      The Service is provided on an "as available" basis. I do not guarantee any specific
+      uptime or reliability. Lead assignments may be delayed, interrupted, or missed due to
+      issues with the Service, Close's API, or third-party infrastructure. I reserve the right
+      to modify, suspend, or discontinue the Service at any time without notice.
+    </p>
+  </section>
+
+  <section>
+    <h2>7. Disclaimer of Warranties</h2>
+    <p>
+      THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND,
+      EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY,
+      FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. I DO NOT WARRANT THAT THE
+      SERVICE WILL BE ERROR-FREE OR UNINTERRUPTED.
+    </p>
+  </section>
+
+  <section>
+    <h2>8. Limitation of Liability</h2>
+    <p>
+      TO THE FULLEST EXTENT PERMITTED BY LAW, I SHALL NOT BE LIABLE FOR ANY INDIRECT,
+      INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING FROM YOUR USE OF
+      THE SERVICE, INCLUDING BUT NOT LIMITED TO LOSS OF DATA, MISSED LEAD ASSIGNMENTS,
+      OR BUSINESS INTERRUPTION, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+    </p>
+  </section>
+
+  <section>
+    <h2>9. Changes to Terms</h2>
+    <p>
+      I may update these Terms at any time. Continued use of the Service after changes
+      are posted constitutes your acceptance of the revised Terms. It is your responsibility
+      to review these Terms periodically.
+    </p>
+  </section>
+
+  <section>
+    <h2>10. Governing Law</h2>
+    <p>
+      These Terms are governed by the laws of the State of Maryland, without regard to
+      its conflict of law provisions.
+    </p>
+  </section>
+
+  <section>
+    <h2>11. Contact</h2>
+    <p>
+      Questions about these Terms may be sent to
+      <a href="mailto:nick@closekit.com">nick@closekit.com</a>.
+    </p>
+  </section>
+
+  <div class="legal-footer">
+    <a href="{{ url_for('legal.privacy') }}">Privacy Policy</a>
+    <a href="{{ url_for('main.index') }}">← Back to app</a>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Rotations{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Rotations</h1>
+  <a href="{{ url_for('rotations.create_rotation') }}" class="btn btn-primary">+ New rotation</a>
+</div>
+
+{% if rotations %}
+  {% for rotation in rotations %}
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h3 style="margin-bottom:.2rem;">
+          <a href="{{ url_for('rotations.view_rotation', rotation_id=rotation.id) }}">{{ rotation.name }}</a>
+        </h3>
+        {% if rotation.description %}
+          <p class="text-muted" style="margin:0;">{{ rotation.description }}</p>
+        {% endif %}
+      </div>
+      <div class="flex gap-2 items-center">
+        <a href="{{ url_for('rotations.view_rotation', rotation_id=rotation.id) }}" class="btn btn-outline btn-sm">View</a>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:2rem; font-size:.85rem; color:#6b7280; margin-top:.25rem;">
+      <span>{{ rotation.members | length }} member{{ 's' if rotation.members | length != 1 }}</span>
+      {% set queue_count = rotation.queues.count() %}
+      <span>{{ queue_count }} lead list{{ 's' if queue_count != 1 }}</span>
+      <span>Next up:
+        {% set next = rotation.next_member() %}
+        {% if next %}
+          <strong>{{ next.close_user_name or next.close_user_email }}</strong>
+        {% else %}
+          <em>No active members</em>
+        {% endif %}
+      </span>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state card">
+    <p style="font-size:1.1rem; font-weight:500; color:#374151;">No rotations yet</p>
+    <p>Create your first rotation to start assigning leads.</p>
+    <a href="{{ url_for('rotations.create_rotation') }}" class="btn btn-primary" style="margin-top:.5rem;">Create a rotation</a>
+  </div>
+{% endif %}
+{% endblock %}

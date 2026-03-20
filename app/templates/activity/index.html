@@ -1,0 +1,441 @@
+{% extends "base.html" %}
+{% block title %}Activity Log{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Activity Log</h1>
+  <span class="activity-total text-muted" id="total-badge"></span>
+</div>
+
+{# ── Filters ── #}
+<div class="activity-filters">
+  {# Timeframe #}
+  <div class="filter-group">
+    <select id="filter-timeframe" class="filter-select">
+      <option value="all">All time</option>
+      <option value="today">Today</option>
+      <option value="this_week">This week</option>
+      <option value="this_month">This month</option>
+      <option value="custom">Custom range</option>
+    </select>
+  </div>
+
+  {# Custom date range (hidden by default) #}
+  <div class="filter-group filter-custom-dates" id="custom-dates" style="display:none;">
+    <input type="date" id="filter-date-from" class="filter-input" placeholder="From">
+    <span style="color:var(--text-muted); font-size:.85rem;">to</span>
+    <input type="date" id="filter-date-to" class="filter-input" placeholder="To">
+  </div>
+
+  {# Group multi-select #}
+  <div class="filter-group">
+    <div class="filter-dropdown" id="dropdown-groups">
+      <button type="button" class="filter-dropdown-btn">
+        Group <span class="filter-count" id="count-groups"></span>
+        <span class="filter-caret">&#9662;</span>
+      </button>
+      <div class="filter-dropdown-menu">
+        {% for g in groups %}
+        <label><input type="checkbox" value="{{ g.id }}" name="group_ids"> {{ g.name }}</label>
+        {% endfor %}
+        {% if not groups %}
+        <span class="text-muted" style="padding:.5rem .75rem; font-size:.85rem;">No groups</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# Lead List multi-select #}
+  <div class="filter-group">
+    <div class="filter-dropdown" id="dropdown-lists">
+      <button type="button" class="filter-dropdown-btn">
+        Lead List <span class="filter-count" id="count-lists"></span>
+        <span class="filter-caret">&#9662;</span>
+      </button>
+      <div class="filter-dropdown-menu">
+        {% for ll in lead_lists %}
+        <label><input type="checkbox" value="{{ ll.id }}" name="lead_list_ids"> {{ ll.name }}</label>
+        {% endfor %}
+        {% if not lead_lists %}
+        <span class="text-muted" style="padding:.5rem .75rem; font-size:.85rem;">No lead lists</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# Assigned-to multi-select #}
+  <div class="filter-group">
+    <div class="filter-dropdown" id="dropdown-users">
+      <button type="button" class="filter-dropdown-btn">
+        Assigned To <span class="filter-count" id="count-users"></span>
+        <span class="filter-caret">&#9662;</span>
+      </button>
+      <div class="filter-dropdown-menu">
+        {% for uid, uname in users %}
+        <label><input type="checkbox" value="{{ uid }}" name="user_ids"> {{ uname or uid }}</label>
+        {% endfor %}
+        {% if not users %}
+        <span class="text-muted" style="padding:.5rem .75rem; font-size:.85rem;">No assignments yet</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# Lead search — pushed to the right #}
+  <div class="filter-group" style="margin-left:auto;">
+    <input type="search" id="filter-search" class="filter-input filter-search"
+           placeholder="Search Leads..." autocomplete="off">
+  </div>
+</div>
+
+{# ── Table ── #}
+<div class="card" style="padding:0; overflow:hidden;">
+  <table class="activity-table">
+    <thead>
+      <tr>
+        <th class="sortable" id="sort-when" style="cursor:pointer;">
+          When
+          <span class="sort-arrow" id="sort-arrow">&#9662;</span>
+        </th>
+        <th>Lead</th>
+        <th>Assigned To</th>
+        <th>Lead List</th>
+        <th>Group</th>
+      </tr>
+    </thead>
+    <tbody id="activity-tbody">
+    </tbody>
+  </table>
+
+  {# Empty state #}
+  <div id="empty-state" style="display:none; text-align:center; padding:3rem 1rem; color:var(--text-muted);">
+    <p style="margin:0; font-size:.95rem;">No assignments found.</p>
+  </div>
+
+  {# Infinite scroll sentinel + spinner #}
+  <div id="scroll-sentinel" style="padding:1rem; text-align:center; display:none;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)"
+         stroke-width="2" style="animation: spin 1s linear infinite;">
+      <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+    </svg>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Filters bar */
+  .activity-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    align-items: center;
+  }
+  .filter-select, .filter-input {
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    background: #fff;
+    color: var(--text-primary);
+  }
+  .filter-input { width: 130px; }
+  .filter-search { width: 200px; }
+  .filter-custom-dates {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  /* Multi-select dropdown */
+  .filter-dropdown { position: relative; }
+  .filter-dropdown-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    background: #fff;
+    color: var(--text-primary);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .filter-dropdown-btn:hover { border-color: #c4b5a6; }
+  .filter-caret { font-size: 0.6rem; opacity: 0.5; }
+  .filter-count {
+    background: var(--primary);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.05rem 0.35rem;
+    border-radius: 999px;
+    display: none;
+  }
+  .filter-count.visible { display: inline; }
+
+  .filter-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 200px;
+    max-height: 240px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    z-index: 100;
+    padding: 0.35rem 0;
+  }
+  .filter-dropdown.open .filter-dropdown-menu { display: block; }
+  .filter-dropdown-menu label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: normal;
+    cursor: pointer;
+    margin: 0;
+  }
+  .filter-dropdown-menu label:hover { background: var(--border-light); }
+  .filter-dropdown-menu input[type="checkbox"] { accent-color: var(--primary); }
+
+  /* Table */
+  .activity-table { margin: 0; }
+  .activity-table td { font-size: 0.87rem; }
+  .activity-table .lead-link { color: var(--primary); }
+  .activity-table .lead-link:hover { text-decoration: underline; }
+
+  /* Sort arrow */
+  .sort-arrow {
+    font-size: 0.6rem;
+    opacity: 0.5;
+    margin-left: 0.2rem;
+    transition: transform 0.15s;
+  }
+  .sort-arrow.asc { transform: rotate(180deg); }
+
+  /* Total badge */
+  .activity-total { font-size: 0.9rem; font-weight: 500; }
+</style>
+
+<script>
+(function () {
+  // ── State ──────────────────────────────────────────────────────────────
+  var sort = 'desc';
+  var cursor = null;
+  var loading = false;
+  var hasMore = true;
+
+  // DOM refs
+  var tbody     = document.getElementById('activity-tbody');
+  var sentinel  = document.getElementById('scroll-sentinel');
+  var emptyEl   = document.getElementById('empty-state');
+  var totalEl   = document.getElementById('total-badge');
+  var sortArrow = document.getElementById('sort-arrow');
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+
+  function timeAgo(d) {
+    var s = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (s < 60)  return 'just now';
+    var m = Math.floor(s / 60);
+    if (m < 60)  return m + 'm ago';
+    var h = Math.floor(m / 60);
+    if (h < 24)  return h + 'h ago';
+    var days = Math.floor(h / 24);
+    return days + 'd ago';
+  }
+
+  function fmtDate(iso) {
+    var d = new Date(iso);
+    var str = d.toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    });
+    return str + '  (' + timeAgo(d) + ')';
+  }
+
+  function getChecked(name) {
+    var boxes = document.querySelectorAll('input[name="' + name + '"]:checked');
+    return Array.prototype.map.call(boxes, function (cb) { return cb.value; });
+  }
+
+  function buildParams() {
+    var p = new URLSearchParams();
+    p.set('sort', sort);
+    p.set('limit', '25');
+
+    var tf = document.getElementById('filter-timeframe').value;
+    p.set('timeframe', tf);
+    if (tf === 'custom') {
+      var from = document.getElementById('filter-date-from').value;
+      var to   = document.getElementById('filter-date-to').value;
+      if (from) p.set('date_from', from);
+      if (to)   p.set('date_to', to);
+    }
+
+    var gids = getChecked('group_ids');
+    if (gids.length) p.set('group_ids', gids.join(','));
+
+    var lids = getChecked('lead_list_ids');
+    if (lids.length) p.set('lead_list_ids', lids.join(','));
+
+    var uids = getChecked('user_ids');
+    if (uids.length) p.set('user_ids', uids.join(','));
+
+    var q = document.getElementById('filter-search').value.trim();
+    if (q) p.set('search', q);
+
+    if (cursor) p.set('cursor', cursor);
+    return p;
+  }
+
+  // ── Fetch + Render ─────────────────────────────────────────────────────
+
+  function fetchPage() {
+    if (loading || !hasMore) return;
+    loading = true;
+    sentinel.style.display = 'block';
+
+    fetch('/activity/api?' + buildParams().toString(), {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        // Update total
+        var noun = data.total === 1 ? 'lead' : 'leads';
+        totalEl.textContent = data.total + ' ' + noun + ' assigned';
+
+        // Append rows
+        data.items.forEach(function (item) {
+          var tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td style="white-space:nowrap;">' + fmtDate(item.assigned_at) + '</td>' +
+            '<td><a class="lead-link" href="https://app.close.com/lead/' + item.close_lead_id + '/" target="_blank" rel="noopener">' +
+              escHtml(item.close_lead_name) + '</a></td>' +
+            '<td>' + escHtml(item.close_user_name) + '</td>' +
+            '<td><a href="/groups/' + item.rotation_id + '/lead-lists/' + item.queue_id + '">' +
+              escHtml(item.queue_name) + '</a></td>' +
+            '<td><a href="/groups/' + item.rotation_id + '">' +
+              escHtml(item.rotation_name) + '</a></td>';
+          tbody.appendChild(tr);
+        });
+
+        hasMore = data.has_more;
+        cursor = data.next_cursor;
+
+        // Show/hide states
+        emptyEl.style.display = (data.total === 0) ? 'block' : 'none';
+        sentinel.style.display = hasMore ? 'block' : 'none';
+        loading = false;
+      })
+      .catch(function () {
+        loading = false;
+        sentinel.style.display = 'none';
+      });
+  }
+
+  function escHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function reset() {
+    cursor = null;
+    hasMore = true;
+    tbody.innerHTML = '';
+    emptyEl.style.display = 'none';
+    fetchPage();
+  }
+
+  // ── Infinite scroll (IntersectionObserver) ─────────────────────────────
+
+  if ('IntersectionObserver' in window) {
+    var observer = new IntersectionObserver(function (entries) {
+      if (entries[0].isIntersecting) fetchPage();
+    }, { rootMargin: '200px' });
+    observer.observe(sentinel);
+  }
+
+  // ── Sort toggle ────────────────────────────────────────────────────────
+
+  document.getElementById('sort-when').addEventListener('click', function () {
+    sort = (sort === 'desc') ? 'asc' : 'desc';
+    sortArrow.className = 'sort-arrow ' + sort;
+    reset();
+  });
+
+  // ── Filter change handlers ─────────────────────────────────────────────
+
+  document.getElementById('filter-timeframe').addEventListener('change', function () {
+    document.getElementById('custom-dates').style.display =
+      this.value === 'custom' ? 'flex' : 'none';
+    reset();
+  });
+
+  document.getElementById('filter-date-from').addEventListener('change', reset);
+  document.getElementById('filter-date-to').addEventListener('change', reset);
+
+  // Multi-select dropdowns: toggle open, update badge, reset on change
+  document.querySelectorAll('.filter-dropdown-btn').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var dd = btn.closest('.filter-dropdown');
+      // Close all others first
+      document.querySelectorAll('.filter-dropdown.open').forEach(function (other) {
+        if (other !== dd) other.classList.remove('open');
+      });
+      dd.classList.toggle('open');
+    });
+  });
+
+  // Close dropdowns on outside click
+  document.addEventListener('click', function () {
+    document.querySelectorAll('.filter-dropdown.open').forEach(function (dd) {
+      dd.classList.remove('open');
+    });
+  });
+
+  // Prevent dropdown menu clicks from closing
+  document.querySelectorAll('.filter-dropdown-menu').forEach(function (menu) {
+    menu.addEventListener('click', function (e) { e.stopPropagation(); });
+  });
+
+  // Checkbox change → update count badge + reset
+  function setupMultiFilter(containerId, countId, name) {
+    var container = document.getElementById(containerId);
+    var badge = document.getElementById(countId);
+    container.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var n = getChecked(name).length;
+        badge.textContent = n;
+        badge.className = 'filter-count' + (n > 0 ? ' visible' : '');
+        reset();
+      });
+    });
+  }
+  setupMultiFilter('dropdown-groups', 'count-groups', 'group_ids');
+  setupMultiFilter('dropdown-lists',  'count-lists',  'lead_list_ids');
+  setupMultiFilter('dropdown-users',  'count-users',  'user_ids');
+
+  // ── Search (debounced) ─────────────────────────────────────────────────
+  var searchTimer = null;
+  document.getElementById('filter-search').addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(reset, 300);
+  });
+
+  // ── Initial load ───────────────────────────────────────────────────────
+  fetchPage();
+})();
+</script>
+{% endblock %}

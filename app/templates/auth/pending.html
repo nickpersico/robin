@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Access Pending{% endblock %}
+
+{% block content %}
+<div style="max-width:480px; margin:4rem auto; text-align:center;">
+  <div class="card" style="padding:2.5rem;">
+    <div style="font-size:2.5rem; margin-bottom:1rem;">⏳</div>
+    <h2 style="margin:0 0 .75rem;">Access pending</h2>
+    <p style="color:#6b7280; margin:0 0 1.5rem;">
+      You've signed in as <strong>{{ current_user.full_name }}</strong> from
+      <strong>{{ current_user.org_name }}</strong>.
+    </p>
+    <p style="color:#6b7280; margin:0 0 1.5rem;">
+      Your access is waiting for approval from an admin in your organization.
+      Once approved, you'll have full access to Robin.
+    </p>
+    <a href="{{ url_for('auth.logout') }}" class="btn btn-outline btn-sm">Sign out</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,326 @@
+{#
+  Member picker partial.
+  Expects: org_users (list of dicts), existing_ids (list of close_user_id strings)
+#}
+{% if error %}
+  <div class="alert alert-error">Could not load org users from Close: {{ error }}</div>
+{% endif %}
+
+{% if org_users %}
+
+<div class="form-group" id="member-picker">
+
+  {# ── Header row: label + Add member button ── #}
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.5rem;">
+    <label style="margin:0;">
+      Members
+      <span class="text-muted" id="member-count-label" style="font-weight:400;"></span>
+    </label>
+    <button type="button" id="open-picker-btn" class="btn btn-primary btn-sm">
+      + Add member
+    </button>
+  </div>
+
+  {# ── Inline search dropdown (hidden until button clicked) ── #}
+  <div id="member-dropdown" style="display:none; position:relative; margin-bottom:.5rem;">
+      <div style="position:relative;">
+        <input id="member-search" type="text" placeholder="Search by name or email…"
+               autocomplete="off"
+               style="width:100%; box-sizing:border-box; padding:.45rem .75rem .45rem 2rem;
+                      border:1px solid #2563eb; border-radius:6px; font-size:.9rem;
+                      outline:none; background:#fff;">
+        <span style="position:absolute; left:.6rem; top:50%; transform:translateY(-50%);
+                     color:#9ca3af; pointer-events:none; font-size:.9rem;">&#9906;</span>
+      </div>
+
+      <ul id="search-results"
+          style="margin:.3rem 0 0; padding:.25rem; background:#fff;
+                 border:1px solid #e5e7eb; border-radius:8px;
+                 max-height:220px; overflow-y:auto; list-style:none;">
+      </ul>
+      <p id="no-results" class="text-muted"
+         style="display:none; font-size:.85rem; padding:.5rem .75rem; margin:0;">
+        No matching users found.
+      </p>
+    </div>
+
+  {# ── Roster list ── #}
+  <div style="background:#fafafa; border:1px solid #e5e7eb; border-radius:8px;
+              margin:0 0 .5rem; padding:.25rem; min-height:60px;">
+    <ul id="rotation-list" class="member-list" style="margin:0; padding:0; list-style:none;"></ul>
+    <p id="empty-hint" class="text-muted"
+       style="font-size:.85rem; text-align:center; padding:.6rem 0; margin:0;">
+      No members added yet.
+    </p>
+  </div>
+
+  <p class="text-muted" id="drag-hint" style="font-size:.8rem; margin:0; display:none;">
+    Drag rows to reorder. Leads are assigned in this order, top to bottom.
+  </p>
+</div>
+
+{# Hidden inputs for form submission #}
+<div id="hidden-inputs"></div>
+
+<script>
+(function () {
+
+  // ── Data ────────────────────────────────────────────────────────────────────
+  const ALL_USERS = {{ org_users | tojson }};
+  const preselected = {{ (existing_ids or []) | tojson }};
+
+  // Normalise to a consistent shape, keyed by id
+  const userMap = {};
+  ALL_USERS.forEach(u => {
+    const firstName = u.first_name || u.display_name || '';
+    const lastName  = u.last_name  || '';
+    const name = (firstName + ' ' + lastName).trim() || u.email || u.id;
+    userMap[u.id] = { id: u.id, name, email: u.email || '' };
+  });
+
+  // ── State ───────────────────────────────────────────────────────────────────
+  const rotationIds = []; // ordered array of Close user IDs
+
+  // ── DOM refs ────────────────────────────────────────────────────────────────
+  const list          = document.getElementById('rotation-list');
+  const emptyHint     = document.getElementById('empty-hint');
+  const dragHint      = document.getElementById('drag-hint');
+  const countLabel    = document.getElementById('member-count-label');
+  const hiddenWrap    = document.getElementById('hidden-inputs');
+  const openBtn       = document.getElementById('open-picker-btn');
+  const dropdown      = document.getElementById('member-dropdown');
+  const searchInput   = document.getElementById('member-search');
+  const resultsList   = document.getElementById('search-results');
+  const noResults     = document.getElementById('no-results');
+
+  // ── Init ────────────────────────────────────────────────────────────────────
+  if (preselected.length) addUsers(preselected);
+
+  // ── Open / close picker ─────────────────────────────────────────────────────
+  openBtn.addEventListener('click', () => {
+    const isOpen = dropdown.style.display !== 'none';
+    if (isOpen) {
+      closePicker();
+    } else {
+      dropdown.style.display = 'block';
+      openBtn.textContent    = '✕ Cancel';
+      openBtn.classList.remove('btn-primary');
+      openBtn.classList.add('btn-outline');
+      searchInput.value = '';
+      renderResults('');
+      searchInput.focus();
+    }
+  });
+
+  function closePicker() {
+    dropdown.style.display = 'none';
+    openBtn.textContent    = '+ Add member';
+    openBtn.classList.remove('btn-outline');
+    openBtn.classList.add('btn-primary');
+  }
+
+  // Close on click outside
+  document.addEventListener('click', e => {
+    if (!dropdown.contains(e.target) && e.target !== openBtn) closePicker();
+  });
+
+  // ── Search ──────────────────────────────────────────────────────────────────
+  searchInput.addEventListener('input', () => renderResults(searchInput.value));
+
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closePicker();
+    if (e.key === 'ArrowDown') {
+      const first = resultsList.querySelector('li:not(.disabled)');
+      first && first.focus();
+    }
+  });
+
+  function renderResults(query) {
+    const q = query.toLowerCase();
+    resultsList.innerHTML = '';
+    let visibleCount = 0;
+
+    // Sort: unselected first (alphabetically), then disabled at bottom
+    const sorted = Object.values(userMap).slice().sort((a, b) => {
+      const aIn = rotationIds.includes(a.id);
+      const bIn = rotationIds.includes(b.id);
+      if (aIn !== bIn) return aIn ? 1 : -1;
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+
+    sorted.forEach(u => {
+      const matchName  = u.name.toLowerCase().includes(q);
+      const matchEmail = u.email.toLowerCase().includes(q);
+      if (!matchName && !matchEmail) return;
+
+      visibleCount++;
+      const inRotation = rotationIds.includes(u.id);
+      const li = document.createElement('li');
+      li.tabIndex = inRotation ? -1 : 0;
+      li.dataset.id = u.id;
+      li.style.cssText = `
+        display:flex; flex-direction:column; justify-content:center;
+        padding:.45rem .65rem; border-radius:6px; cursor:${inRotation ? 'default' : 'pointer'};
+        opacity:${inRotation ? '.45' : '1'};
+        user-select:none;
+      `;
+      if (inRotation) li.classList.add('disabled');
+      li.innerHTML = `
+        <span style="font-size:.9rem; font-weight:500; color:#111827; line-height:1.25;">
+          ${escHtml(u.name)}
+          ${inRotation ? '<span style="font-size:.75rem; font-weight:400; color:#9ca3af; margin-left:.35rem;">already added</span>' : ''}
+        </span>
+        ${u.email ? `<span style="font-size:.78rem; color:#9ca3af; margin-top:.1rem;">${escHtml(u.email)}</span>` : ''}
+      `;
+
+      if (!inRotation) {
+        li.addEventListener('click',    () => selectUser(u.id));
+        li.addEventListener('keydown',  e => {
+          if (e.key === 'Enter' || e.key === ' ') selectUser(u.id);
+          if (e.key === 'Escape') { closePicker(); openBtn.focus(); }
+          if (e.key === 'ArrowDown') li.nextElementSibling?.focus();
+          if (e.key === 'ArrowUp')   li.previousElementSibling ? li.previousElementSibling.focus() : searchInput.focus();
+        });
+        li.addEventListener('mouseover', () => li.style.background = '#f3f4f6');
+        li.addEventListener('mouseout',  () => li.style.background = '');
+      }
+
+      resultsList.appendChild(li);
+    });
+
+    noResults.style.display  = visibleCount === 0 ? 'block' : 'none';
+    resultsList.style.display = visibleCount === 0 ? 'none' : '';
+  }
+
+  function selectUser(id) {
+    addUsers([id]);
+    searchInput.value = '';
+    renderResults('');
+    searchInput.focus();
+  }
+
+  // ── Roster management ────────────────────────────────────────────────────────
+  function addUsers(ids) {
+    ids.forEach(id => {
+      if (rotationIds.includes(id) || !userMap[id]) return;
+      rotationIds.push(id);
+      appendListItem(id);
+    });
+    refresh();
+  }
+
+  function removeUser(id) {
+    const idx = rotationIds.indexOf(id);
+    if (idx > -1) rotationIds.splice(idx, 1);
+    list.querySelector(`li[data-id="${id}"]`)?.remove();
+    // Re-render results if picker is open
+    if (dropdown.style.display !== 'none') renderResults(searchInput.value);
+    refresh();
+  }
+
+  function appendListItem(id) {
+    const u = userMap[id];
+    if (!u) return;
+    const li = document.createElement('li');
+    li.dataset.id  = id;
+    li.draggable   = true;
+    li.style.cssText = `
+      display:flex; align-items:center; gap:.6rem;
+      padding:.5rem .6rem; border-radius:6px;
+      background:#fff; border:1px solid #e5e7eb;
+      margin-bottom:.3rem; cursor:grab;
+    `;
+    li.innerHTML = `
+      <span class="handle" title="Drag to reorder"
+            style="color:#d1d5db; font-size:1rem; cursor:grab; flex-shrink:0;">⠿</span>
+      <span class="position-num"
+            style="color:#9ca3af; font-size:.78rem; min-width:1.25rem; text-align:right; flex-shrink:0;"></span>
+      <span style="flex:1; min-width:0; display:flex; flex-direction:column; gap:.1rem;">
+        <span style="font-size:.9rem; font-weight:600; color:#111827; line-height:1.25;
+                     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+          ${escHtml(u.name)}
+        </span>
+        ${u.email
+          ? `<span style="font-size:.78rem; color:#9ca3af; white-space:nowrap;
+                          overflow:hidden; text-overflow:ellipsis;">${escHtml(u.email)}</span>`
+          : ''}
+      </span>
+      <button type="button" class="remove-btn"
+              data-id="${id}"
+              style="flex-shrink:0; background:none; border:none; padding:.2rem .35rem;
+                     color:#9ca3af; font-size:1rem; line-height:1; cursor:pointer;
+                     border-radius:4px;"
+              title="Remove from group"
+              onmouseover="this.style.color='#ef4444';this.style.background='#fee2e2';"
+              onmouseout="this.style.color='#9ca3af';this.style.background='';">×</button>
+    `;
+    list.appendChild(li);
+  }
+
+  // ── Remove button handler ────────────────────────────────────────────────────
+  list.addEventListener('click', e => {
+    const btn = e.target.closest('.remove-btn');
+    if (btn) removeUser(btn.dataset.id);
+  });
+
+  // ── Drag-to-reorder ──────────────────────────────────────────────────────────
+  let dragging = null;
+  list.addEventListener('dragstart', e => {
+    dragging = e.target.closest('li');
+    setTimeout(() => dragging && (dragging.style.opacity = '.35'), 0);
+  });
+  list.addEventListener('dragend', () => {
+    if (dragging) dragging.style.opacity = '1';
+    dragging = null;
+    syncFromDom();
+  });
+  list.addEventListener('dragover', e => {
+    e.preventDefault();
+    const target = e.target.closest('li');
+    if (!target || !dragging || target === dragging) return;
+    const after = e.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2;
+    list.insertBefore(dragging, after ? target.nextSibling : target);
+  });
+
+  // ── Sync & refresh ──────────────────────────────────────────────────────────
+  function syncFromDom() {
+    rotationIds.length = 0;
+    list.querySelectorAll('li').forEach(li => rotationIds.push(li.dataset.id));
+    refresh();
+  }
+
+  function refresh() {
+    list.querySelectorAll('li').forEach((li, i) => {
+      const num = li.querySelector('.position-num');
+      if (num) num.textContent = (i + 1) + '.';
+    });
+
+    const count = rotationIds.length;
+    emptyHint.style.display = count === 0 ? 'block' : 'none';
+    dragHint.style.display  = count > 1   ? 'block' : 'none';
+    countLabel.textContent  = count > 0   ? `(${count} member${count === 1 ? '' : 's'})` : '';
+
+    hiddenWrap.innerHTML = '';
+    rotationIds.forEach(id => {
+      const inp = document.createElement('input');
+      inp.type  = 'hidden';
+      inp.name  = 'member_ids';
+      inp.value = id;
+      hiddenWrap.appendChild(inp);
+    });
+  }
+
+  function escHtml(s) {
+    return (s || '')
+      .replace(/&/g,  '&amp;')
+      .replace(/</g,  '&lt;')
+      .replace(/>/g,  '&gt;')
+      .replace(/"/g,  '&quot;');
+  }
+
+})();
+</script>
+
+{% else %}
+  <p class="text-muted">No active users found in your Close organization.</p>
+{% endif %}

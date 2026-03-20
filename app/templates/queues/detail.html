@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}{{ queue.name }}{% endblock %}
+
+{% block content %}
+
+{# ── Page header ── #}
+<div class="page-header">
+  <div>
+    <p class="text-muted" style="margin:0 0 .2rem; font-size:.85rem;">
+      <a href="{{ url_for('rotations.view_rotation', rotation_id=rotation.id) }}">{{ rotation.name }}</a>
+    </p>
+    <div style="display:flex; align-items:center; gap:.75rem;">
+      <h1 style="margin:0;">{{ queue.name }}</h1>
+      {# Status badge #}
+      {% if queue.status == 'active' %}
+        <span class="badge badge-green">Active</span>
+      {% elif queue.status == 'paused' %}
+        <span class="badge badge-gray">Paused</span>
+      {% elif queue.status == 'pending' %}
+        <span class="badge badge-gray">Not started</span>
+      {% elif queue.status == 'running' %}
+        <span class="badge badge-blue">Running</span>
+      {% elif queue.status == 'completed' %}
+        <span class="badge badge-gray">Completed</span>
+      {% elif queue.status == 'failed' %}
+        <span class="badge badge-red">Failed</span>
+      {% endif %}
+    </div>
+  </div>
+  <div style="display:flex; align-items:center; gap:.5rem;">
+    {# Pause — direct submit #}
+    {% if queue.status == 'active' %}
+      <form method="post" action="{{ url_for('queues.toggle_queue', rotation_id=rotation.id, queue_id=queue.id) }}" style="margin:0;">
+        <button type="submit" class="btn btn-outline btn-sm btn-header">Pause</button>
+      </form>
+    {% endif %}
+    {# Resume — opens confirmation dialog before submitting #}
+    {% if queue.status == 'paused' %}
+      <form id="resume-form" method="post" action="{{ url_for('queues.toggle_queue', rotation_id=rotation.id, queue_id=queue.id) }}" style="margin:0;"></form>
+      <button type="button" class="btn btn-outline btn-sm btn-header" id="resume-btn">Resume</button>
+    {% endif %}
+    <a href="{{ url_for('queues.edit_queue', rotation_id=rotation.id, queue_id=queue.id) }}" class="btn btn-outline btn-sm btn-header">Edit</a>
+    {# Delete — trash icon button #}
+    <form method="post" action="{{ url_for('queues.delete_queue', rotation_id=rotation.id, queue_id=queue.id) }}"
+          onsubmit="return confirm('Delete this lead list and all its assignment history? This cannot be undone.');" style="margin:0;">
+      <button type="submit" class="btn btn-outline btn-sm btn-header" title="Delete lead list"
+              style="color:var(--danger); border-color:#e8b8b0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+          <path d="M9 6V4h6v2"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+</div>
+
+{# ── Status banner ── #}
+{% set assigned_count = logs.total %}
+{% if queue.status == 'active' %}
+  <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:1.25rem 1.5rem; margin-bottom:1rem;">
+    <p style="margin:0 0 .35rem; font-weight:600; color:#15803d;">Watching for new leads</p>
+    <p class="text-muted" style="margin:0; font-size:.875rem;">
+      Robin is monitoring Close for new leads that match your filter conditions and assigning them as they arrive.
+      Checks run every 5 minutes.
+      <strong style="color:#111;">{{ assigned_count }}</strong> lead{{ 's' if assigned_count != 1 }} assigned so far.
+    </p>
+  </div>
+{% elif queue.status == 'paused' %}
+  <div style="background:#fefce8; border:1px solid #fde68a; border-radius:8px; padding:1.25rem 1.5rem; margin-bottom:1rem;">
+    <p style="margin:0 0 .35rem; font-weight:600; color:#92400e;">Paused</p>
+    <p class="text-muted" style="margin:0; font-size:.875rem;">
+      This lead list is paused. New leads will not be assigned until you resume it.
+      <strong style="color:#111;">{{ assigned_count }}</strong> lead{{ 's' if assigned_count != 1 }} assigned so far.
+    </p>
+  </div>
+{% endif %}
+
+{# ── Queue details ── #}
+<div class="card">
+  <table>
+    <tbody>
+      <tr>
+        <td style="color:#6b7280; font-size:.85rem;">Assigned to field</td>
+        <td>{{ queue.custom_field_label or queue.custom_field_id or '—' }}</td>
+      </tr>
+      <tr>
+        <td style="color:#6b7280; font-size:.85rem;">Overwrite existing</td>
+        <td>
+          {% if queue.overwrite_existing %}
+            <span class="badge badge-blue">Yes</span>
+          {% else %}
+            <span class="badge badge-gray">No — skip if set</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% if queue.filters_json %}
+      <tr>
+        <td style="color:#6b7280; font-size:.85rem; vertical-align:top; padding-top:.65rem;">Lead filter</td>
+        <td>
+          <details>
+            <summary style="cursor:pointer; font-size:.85rem; color:#6b7280; user-select:none;">View filter JSON</summary>
+            <pre style="margin:.5rem 0 0; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px;
+                        padding:.6rem .75rem; font-size:.8rem; overflow-x:auto; white-space:pre-wrap;
+                        word-break:break-all;">{{ queue.filters_json | tojson(indent=2) }}</pre>
+          </details>
+        </td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td style="color:#6b7280; font-size:.85rem;">Last checked</td>
+        <td style="display:flex; align-items:center; gap:.75rem;">
+          {% if queue.last_checked_at %}
+            <span class="local-time" data-utc="{{ queue.last_checked_at.strftime('%Y-%m-%dT%H:%M:%S') }}Z"
+                  style="font-size:.875rem; color:#374151;">—</span>
+          {% else %}
+            <span style="font-size:.875rem; color:#6b7280;">Not yet checked</span>
+          {% endif %}
+          {% if queue.status == 'active' %}
+            <button type="button" class="btn btn-outline btn-sm"
+                    onclick="checkNow(this, '{{ url_for('queues.check_queue', rotation_id=rotation.id, queue_id=queue.id) }}')">
+              Check now
+            </button>
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+{# ── Assignment log ── #}
+<div class="card">
+  <div class="card-header">
+    <h3>Leads Assigned</h3>
+    <span class="text-muted">{{ assigned_count }} total</span>
+  </div>
+
+  {% if logs.items %}
+    <table>
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Lead</th>
+          <th>Assigned to</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs.items %}
+        <tr>
+          <td class="text-muted" style="white-space:nowrap;">
+            <span class="local-time" data-utc="{{ log.assigned_at.strftime('%Y-%m-%dT%H:%M:%S') }}Z">
+              {{- log.assigned_at.strftime('%b %d, %Y %H:%M') -}}
+            </span>
+          </td>
+          <td>
+            <a href="https://app.close.com/lead/{{ log.close_lead_id }}/" target="_blank" rel="noopener"
+               style="color:#2563eb; text-decoration:none;">
+              {{ log.close_lead_name or log.close_lead_id }}
+            </a>
+          </td>
+          <td>{{ log.close_user_name or log.close_user_id }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if logs.pages > 1 %}
+    <div style="display:flex; justify-content:center; gap:.5rem; margin-top:1rem; font-size:.85rem;">
+      {% if logs.has_prev %}
+        <a href="?page={{ logs.prev_num }}" class="btn btn-outline btn-sm">← Prev</a>
+      {% endif %}
+      <span style="padding:.3rem .5rem; color:#6b7280;">Page {{ logs.page }} of {{ logs.pages }}</span>
+      {% if logs.has_next %}
+        <a href="?page={{ logs.next_num }}" class="btn btn-outline btn-sm">Next →</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  {% else %}
+    <p class="text-muted" style="margin:0;">No leads have been assigned through this queue yet.</p>
+  {% endif %}
+</div>
+{# ── Resume confirmation dialog (only rendered when paused) ── #}
+{% if queue.status == 'paused' %}
+<dialog id="resume-dialog" style="border:none; border-radius:12px; padding:0; max-width:480px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,.2);">
+  <div style="padding:1.75rem 1.75rem 1.5rem;">
+    <h2 style="margin:0 0 .75rem; font-size:1.15rem;">Resume this lead list?</h2>
+    <p style="margin:0 0 .6rem; font-size:.9rem; line-height:1.55; color:#374151;">
+      When you resume, Robin will snapshot all leads currently matching your filter and mark
+      them as already seen — they will <strong>not</strong> be assigned.
+    </p>
+    <p style="margin:0 0 1.5rem; font-size:.9rem; line-height:1.55; color:#374151;">
+      Only leads that appear in Close <em>after</em> you resume will be eligible for assignment.
+      Any leads that entered the filter while this list was paused will be skipped.
+    </p>
+    <div style="display:flex; justify-content:flex-end; gap:.6rem;">
+      <button type="button" class="btn btn-outline" id="resume-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="resume-confirm">Yes, resume</button>
+    </div>
+  </div>
+</dialog>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% include "queues/_check_now_js.html" %}
+<script>
+(function () {
+  function formatLocalTime(isoStr) {
+    var d = new Date(isoStr);
+    var datePart = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    var timePart = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    // pull the timezone abbreviation (last token of the long time string)
+    var tzPart  = d.toLocaleTimeString(undefined, { timeZoneName: 'short' }).split(' ').pop();
+    return datePart + ' ' + timePart + ' ' + tzPart;
+  }
+  document.querySelectorAll('.local-time').forEach(function (el) {
+    el.textContent = formatLocalTime(el.dataset.utc);
+  });
+})();
+</script>
+
+{% if queue.status == 'paused' %}
+<script>
+(function () {
+  var btn     = document.getElementById('resume-btn');
+  var dialog  = document.getElementById('resume-dialog');
+  var confirm = document.getElementById('resume-confirm');
+  var cancel  = document.getElementById('resume-cancel');
+  var form    = document.getElementById('resume-form');
+
+  btn.addEventListener('click', function () { dialog.showModal(); });
+  cancel.addEventListener('click', function () { dialog.close(); });
+  dialog.addEventListener('click', function (e) {
+    if (e.target === dialog) dialog.close();
+  });
+  confirm.addEventListener('click', function () {
+    // Keep the dialog open so the user sees "Resuming…" while the server
+    // seeds existing leads — the page will navigate away once done.
+    cancel.disabled = true;
+    window._disableBtn(confirm, 'Resuming\u2026');
+    form.submit();
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ queue.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="text-muted" style="margin:0 0 .2rem; font-size:.85rem;">
+      <a href="{{ url_for('rotations.view_rotation', rotation_id=rotation.id) }}">{{ rotation.name }}</a>
+      &rsaquo;
+      <a href="{{ url_for('queues.view_queue', rotation_id=rotation.id, queue_id=queue.id) }}">{{ queue.name }}</a>
+    </p>
+    <h1>Edit Lead List</h1>
+  </div>
+  <a href="{{ url_for('queues.view_queue', rotation_id=rotation.id, queue_id=queue.id) }}" class="btn btn-outline btn-sm">Cancel</a>
+</div>
+
+{% if error %}
+  <div class="alert alert-warning">Could not load Close custom fields: {{ error }}</div>
+{% endif %}
+
+<div class="card">
+  <form method="post">
+
+    <div class="form-group">
+      <label for="name">Lead list name</label>
+      <input type="text" id="name" name="name" value="{{ request.form.get('name', queue.name) }}" required>
+    </div>
+
+    <div class="divider"></div>
+
+    <h3 style="margin:0 0 .75rem;">Conditions</h3>
+    <div style="display:flex; align-items:flex-start; gap:.6rem; background:#eff6ff;
+                border:1px solid #bfdbfe; border-radius:8px; padding:.75rem 1rem; margin-bottom:1.25rem;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           style="flex-shrink:0; margin-top:.1rem;">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <p style="margin:0; font-size:.875rem; color:#1e40af; line-height:1.5;">
+        Robin will watch for <strong>new leads</strong> created in Close that match the filter below
+        and assign them as they come in. Leads that already exist in Close will not be assigned.
+      </p>
+    </div>
+
+    <div class="form-group">
+      <label for="filters_json">Lead filter <span class="text-muted">(JSON from Close)</span></label>
+      {% include "queues/_filter_help_modal.html" %}
+      <textarea id="filters_json" name="filters_json" rows="6" required
+                style="font-family: monospace; font-size: .85rem;"
+                placeholder='{"type":"and","queries":[]}'
+      >{{ request.form.get('filters_json', queue.filters_json | tojson(indent=2) if queue.filters_json else '') }}</textarea>
+      <p class="text-muted" style="font-size:.82rem; margin:.35rem 0 0;">
+        Paste the filter JSON from a Close Saved Search to define which leads are assigned.
+      </p>
+    </div>
+
+    <div class="form-group">
+      <label for="custom_field_id">User custom field</label>
+      {% if custom_fields %}
+        <select id="custom_field_id" name="custom_field_id">
+          <option value="">— Select a field —</option>
+          {% set selected_field = request.form.get('custom_field_id', queue.custom_field_id or '') %}
+          {% for field in custom_fields %}
+            <option value="{{ field.id }}" {% if field.id == selected_field %}selected{% endif %}>
+              {{ field.name }}
+            </option>
+          {% endfor %}
+        </select>
+        <p class="text-muted" style="font-size:.82rem; margin:.35rem 0 0;">
+          Robin will write the assigned user's ID into this field on the lead.
+        </p>
+      {% else %}
+        <p class="text-muted">
+          No User-type custom fields found in your Close org.
+          <a href="https://app.close.com/settings/custom-fields/" target="_blank" rel="noopener">Create one in Close</a> first.
+        </p>
+        <input type="hidden" name="custom_field_id" value="">
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      <label style="display:flex; align-items:flex-start; gap:.6rem; cursor:pointer; font-weight:normal;">
+        <input type="checkbox" name="overwrite_existing" value="1"
+               style="margin-top:.2rem; accent-color:#2563eb;"
+               {% if request.form.get('overwrite_existing') == '1' or (request.method == 'GET' and queue.overwrite_existing) %}checked{% endif %}>
+        <span>
+          <strong style="font-weight:600;">Overwrite existing values</strong><br>
+          <span class="text-muted" style="font-size:.875rem;">
+            If the selected field already has a value on a lead, Robin will overwrite it.
+            When unchecked, leads with an existing value are skipped.
+          </span>
+        </span>
+      </label>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; gap:.75rem; margin-top:1.5rem;">
+      <a href="{{ url_for('queues.view_queue', rotation_id=rotation.id, queue_id=queue.id) }}" class="btn btn-outline">Cancel</a>
+      <button type="submit" class="btn btn-primary">Save changes</button>
+    </div>
+
+  </form>
+</div>
+
+{# ── Filter-change confirmation dialog ── #}
+<dialog id="filter-change-dialog" style="border:none; border-radius:12px; padding:0; max-width:480px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,.2);">
+  <div style="padding:1.75rem 1.75rem 1.5rem;">
+    <h2 style="margin:0 0 .75rem; font-size:1.15rem;">Update lead filter?</h2>
+    <p style="margin:0 0 .6rem; font-size:.9rem; line-height:1.55; color:#374151;">
+      Changing the lead filter will reset Robin's snapshot of existing leads.
+    </p>
+    <p style="margin:0 0 1.5rem; font-size:.9rem; line-height:1.55; color:#374151;">
+      Robin will immediately fetch all leads currently matching your <strong>new</strong> filter
+      and mark them as already seen — they will <strong>not</strong> be assigned.
+      Only leads that appear in Close <em>after</em> you save will be eligible for assignment.
+    </p>
+    <div style="display:flex; justify-content:flex-end; gap:.6rem;">
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('filter-change-dialog').close()">
+        Cancel
+      </button>
+      <button type="button" class="btn btn-primary" id="filter-change-confirm">
+        Yes, update filter
+      </button>
+    </div>
+  </div>
+</dialog>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Inject the saved filter as a real JS value — no HTML-attribute encoding issues.
+var _savedFilter = {{ queue.filters_json | tojson if queue.filters_json else 'null' }};
+</script>
+<script>
+(function () {
+  var form     = document.querySelector('form');
+  var textarea = document.getElementById('filters_json');
+  var dialog   = document.getElementById('filter-change-dialog');
+  var confirm  = document.getElementById('filter-change-confirm');
+
+  // Normalise a JSON string for comparison (strips whitespace/key-order differences)
+  function normalise(str) {
+    try { return JSON.stringify(JSON.parse(str)); } catch (e) { return str.trim(); }
+  }
+
+  // Original value comes from the server-rendered JS object, not an HTML attribute.
+  var originalValue = _savedFilter ? JSON.stringify(_savedFilter) : '';
+
+  form.addEventListener('submit', function (e) {
+    var currentValue = normalise(textarea.value);
+    if (currentValue !== originalValue) {
+      // Stop the event from bubbling to the global disable-buttons handler —
+      // we don't want buttons locked while the user is still deciding.
+      e.preventDefault();
+      e.stopPropagation();
+      dialog.showModal();
+    }
+  });
+
+  // Backdrop click closes dialog
+  dialog.addEventListener('click', function (e) {
+    if (e.target === dialog) dialog.close();
+  });
+
+  // Confirmed — disable buttons then programmatically submit.
+  // form.submit() bypasses the 'submit' event, so we call the helper manually.
+  confirm.addEventListener('click', function () {
+    // Disable the dialog button immediately so it can't be double-clicked,
+    // then lock the form's submit button before navigating away.
+    window._disableBtn(confirm, 'Saving\u2026');
+    dialog.close();
+    window._disableSubmits(form);
+    form.submit();
+  });
+})();
+</script>
+{% endblock %}

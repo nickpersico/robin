@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy{% endblock %}
+
+{% block head %}
+<style>
+  .legal-wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 2rem 0 4rem;
+  }
+  .legal-wrap h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 0.35rem;
+  }
+  .legal-effective {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0 0 2.5rem;
+  }
+  .legal-wrap section { margin-bottom: 1.75rem; }
+  .legal-wrap h2 {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 0.4rem;
+  }
+  .legal-wrap h3 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 1rem 0 0.3rem;
+  }
+  .legal-wrap p, .legal-wrap li {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin: 0 0 0.5rem;
+  }
+  .legal-wrap ul {
+    padding-left: 1.4rem;
+    margin: 0 0 0.5rem;
+  }
+  .legal-wrap li { margin-bottom: 0.3rem; }
+  .legal-footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .legal-footer a { color: var(--text-muted); }
+  .legal-footer a:hover { color: var(--primary); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="legal-wrap">
+
+  <h1>Privacy Policy</h1>
+  <p class="legal-effective">Effective date: March 19, 2026</p>
+
+  <section>
+    <h2>1. Overview</h2>
+    <p>
+      This Privacy Policy describes how Nick Persico ("I", "me", or "my") collects, uses,
+      and stores information when you use Robin at
+      <a href="https://robin.closekit.com">robin.closekit.com</a>
+      (the "Service"). By using the Service, you agree to the practices described here.
+    </p>
+  </section>
+
+  <section>
+    <h2>2. Information We Collect</h2>
+
+    <h3>From Close (via OAuth)</h3>
+    <ul>
+      <li>Your Close user ID, name, and email address — used to identify your account within the Service.</li>
+      <li>OAuth access and refresh tokens — used to authenticate API requests to Close on your behalf.</li>
+      <li>Lead records from your Close account — read during polling operations to identify leads for assignment. Lead names and IDs are stored in Robin's assignment log to provide an audit trail.</li>
+    </ul>
+
+    <h3>From you directly</h3>
+    <ul>
+      <li>Group and Lead List configuration — group names, member ordering, lead list names, and the Close filter queries you provide.</li>
+    </ul>
+
+    <h3>Automatically</h3>
+    <ul>
+      <li>Assignment history — a record of each lead assigned, including the lead name, the Close user it was assigned to, and the timestamp. This forms the Activity Log.</li>
+      <li>Polling metadata — timestamps of last check, lead list status, and error messages used to display status in the app.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>3. How We Use Your Information</h2>
+    <ul>
+      <li>To authenticate you via your Close account.</li>
+      <li>To poll your Close account for leads matching your configured filters.</li>
+      <li>To assign those leads to your team members in round-robin order via the Close API.</li>
+      <li>To display assignment history, group status, and lead list activity within the app.</li>
+      <li>To maintain your session while you are logged in.</li>
+    </ul>
+    <p>
+      We do not use your data for advertising, analytics, or any purpose other than
+      operating the Service.
+    </p>
+  </section>
+
+  <section>
+    <h2>4. Data Sharing</h2>
+    <p>
+      We do not sell, rent, or share your personal information with third parties, except
+      as necessary to operate the Service:
+    </p>
+    <ul>
+      <li><strong>Close CRM</strong> — we read lead data and update lead ownership via Close's API using the permissions you grant via OAuth.</li>
+      <li><strong>Fly.io</strong> — the Service is hosted on Fly.io. Data at rest is stored in a Fly.io-managed PostgreSQL database. See <a href="https://fly.io/legal/privacy-policy" target="_blank" rel="noopener">Fly.io's privacy policy</a>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>5. Data Retention</h2>
+    <p>
+      Your account information, OAuth tokens, group and lead list configurations, and
+      assignment history are retained for as long as you have an account with the Service.
+      To request full deletion of your account and associated data, contact
+      <a href="mailto:nick@closekit.com">nick@closekit.com</a>.
+    </p>
+  </section>
+
+  <section>
+    <h2>6. Security</h2>
+    <p>
+      OAuth tokens are stored in a private, encrypted-at-rest database. All connections
+      to the Service use HTTPS. However, no method of transmission or storage is 100%
+      secure. You are responsible for maintaining the security of your Close account.
+    </p>
+  </section>
+
+  <section>
+    <h2>7. Your Rights</h2>
+    <p>
+      You may revoke the Service's access to your Close account at any time via
+      Close's OAuth settings. You may also request that we delete all data associated
+      with your account by emailing
+      <a href="mailto:nick@closekit.com">nick@closekit.com</a>.
+    </p>
+  </section>
+
+  <section>
+    <h2>8. Changes to This Policy</h2>
+    <p>
+      I may update this Privacy Policy from time to time. Continued use of the Service
+      after changes are posted constitutes your acceptance of the revised policy.
+    </p>
+  </section>
+
+  <section>
+    <h2>9. Contact</h2>
+    <p>
+      Questions or requests regarding this Privacy Policy may be sent to
+      <a href="mailto:nick@closekit.com">nick@closekit.com</a>.
+    </p>
+  </section>
+
+  <div class="legal-footer">
+    <a href="{{ url_for('legal.terms') }}">Terms of Service</a>
+    <a href="{{ url_for('main.index') }}">← Back to app</a>
+  </div>
+
+</div>
+{% endblock %}
