@@ -8,15 +8,70 @@ from ..models.user import User, ROLE_ADMIN, ROLE_MEMBER, STATUS_ACTIVE, STATUS_P
 
 admin_bp = Blueprint("admin", __name__)
 
+# Emails allowed to access the system-level super-admin dashboard.
+SUPERADMIN_EMAILS = {"nick@close.com"}
+
 
 def admin_required(f):
-    """Decorator that restricts a route to admin users only."""
+    """Decorator that restricts a route to org admin users only."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not current_user.is_authenticated or not current_user.is_admin:
             abort(403)
         return f(*args, **kwargs)
     return decorated
+
+
+def superadmin_required(f):
+    """Decorator that restricts a route to super-admin accounts only."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.email not in SUPERADMIN_EMAILS:
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ---------------------------------------------------------------------------
+# Super-admin dashboard
+# ---------------------------------------------------------------------------
+
+@admin_bp.route("/admin")
+@login_required
+@superadmin_required
+def superadmin_dashboard():
+    from ..models.organization import Organization
+    from ..models.rotation import Rotation
+    from ..models.queue import Queue
+
+    organizations = Organization.query.order_by(Organization.name).all()
+    users = User.query.order_by(User.created_at.desc()).all()
+    rotations = Rotation.query.order_by(Rotation.close_org_id, Rotation.name).all()
+    queues = Queue.query.order_by(Queue.created_at.desc()).all()
+
+    org_map = {o.close_org_id: (o.name or o.close_org_id) for o in organizations}
+
+    return render_template(
+        "admin/dashboard.html",
+        organizations=organizations,
+        users=users,
+        rotations=rotations,
+        queues=queues,
+        org_map=org_map,
+    )
+
+
+@admin_bp.route("/admin/organizations/<org_id>")
+@login_required
+@superadmin_required
+def superadmin_org(org_id):
+    from ..models.organization import Organization
+
+    org = db.session.get(Organization, org_id)
+    if org is None:
+        abort(404)
+    org_users = org.users.order_by(User.created_at.asc()).all()
+    return render_template("admin/org_detail.html", org=org, org_users=org_users)
 
 
 @admin_bp.route("/admin/users")

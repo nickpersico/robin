@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ org.name }} — System Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ org.name }}</h1>
+    <p class="text-muted" style="margin:.25rem 0 0; font-family:monospace; font-size:.82rem;">{{ org.close_org_id }}</p>
+  </div>
+  <a href="{{ url_for('admin.superadmin_dashboard') }}#organizations" class="btn btn-outline btn-sm">&larr; Dashboard</a>
+</div>
+
+<div class="card">
+  {% if org_users %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Joined</th>
+        <th>Last Login</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in org_users %}
+      <tr>
+        <td>{{ user.full_name or '—' }}</td>
+        <td class="text-muted">{{ user.email }}</td>
+        <td>
+          {% if user.is_admin %}
+            <span class="badge badge-blue">Admin</span>
+          {% else %}
+            <span class="badge badge-gray">Member</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if user.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+          {% elif user.status == 'pending' %}
+            <span class="badge badge-red">Pending</span>
+          {% else %}
+            <span class="badge badge-gray">Suspended</span>
+          {% endif %}
+        </td>
+        <td class="text-muted">{{ user.created_at.strftime('%b %d, %Y') }}</td>
+        <td class="text-muted">
+          {% if user.last_login_at %}
+            {{ user.last_login_at.strftime('%b %d, %Y') }}
+          {% else %}
+            —
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No users in this organization.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

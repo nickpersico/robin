@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}System Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>System Dashboard</h1>
+</div>
+
+{# ── Summary stats ── #}
+<div style="display:flex; gap:1rem; margin-bottom:2rem; flex-wrap:wrap;">
+  <a href="#organizations" class="admin-stat-card">
+    <span class="admin-stat-num">{{ organizations | length }}</span>
+    <span class="admin-stat-label">Organizations</span>
+  </a>
+  <a href="#users" class="admin-stat-card">
+    <span class="admin-stat-num">{{ users | length }}</span>
+    <span class="admin-stat-label">Users</span>
+  </a>
+  <a href="#groups" class="admin-stat-card">
+    <span class="admin-stat-num">{{ rotations | length }}</span>
+    <span class="admin-stat-label">Groups</span>
+  </a>
+  <a href="#lead-lists" class="admin-stat-card">
+    <span class="admin-stat-num">{{ queues | length }}</span>
+    <span class="admin-stat-label">Lead Lists</span>
+  </a>
+</div>
+
+{# ── Organizations ── #}
+<h2 class="admin-section-title" id="organizations">Organizations</h2>
+<div class="card" style="margin-bottom:2.5rem;">
+  {% if organizations %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Close Org ID</th>
+        <th>Users</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for org in organizations %}
+      <tr>
+        <td>
+          <a href="{{ url_for('admin.superadmin_org', org_id=org.id) }}" style="color:var(--primary); font-weight:500;">
+            {{ org.name }}
+          </a>
+        </td>
+        <td class="text-muted" style="font-family:monospace; font-size:.82rem;">{{ org.close_org_id }}</td>
+        <td>
+          {{ org.users.count() }}
+          {% set pending = org.pending_count %}
+          {% if pending > 0 %}
+            <span class="badge badge-red" style="margin-left:.3rem;">{{ pending }} pending</span>
+          {% endif %}
+        </td>
+        <td class="text-muted">{{ org.created_at.strftime('%b %d, %Y') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No organizations yet.</p>
+  {% endif %}
+</div>
+
+{# ── Users ── #}
+<h2 class="admin-section-title" id="users">Users</h2>
+<div class="card" style="margin-bottom:2.5rem;">
+  {% if users %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Organization</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Joined</th>
+        <th>Last Login</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td>{{ user.full_name or '—' }}</td>
+        <td class="text-muted">{{ user.email }}</td>
+        <td class="text-muted" style="font-size:.85rem;">
+          {{ org_map.get(user.close_org_id, user.close_org_id or '—') }}
+        </td>
+        <td>
+          {% if user.is_admin %}
+            <span class="badge badge-blue">Admin</span>
+          {% else %}
+            <span class="badge badge-gray">Member</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if user.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+          {% elif user.status == 'pending' %}
+            <span class="badge badge-red">Pending</span>
+          {% else %}
+            <span class="badge badge-gray">Suspended</span>
+          {% endif %}
+        </td>
+        <td class="text-muted">{{ user.created_at.strftime('%b %d, %Y') }}</td>
+        <td class="text-muted">
+          {% if user.last_login_at %}
+            {{ user.last_login_at.strftime('%b %d, %Y') }}
+          {% else %}
+            —
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No users yet.</p>
+  {% endif %}
+</div>
+
+{# ── Groups ── #}
+<h2 class="admin-section-title" id="groups">Groups</h2>
+<div class="card" style="margin-bottom:2.5rem;">
+  {% if rotations %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Organization</th>
+        <th>Owner</th>
+        <th>Members</th>
+        <th>Lead Lists</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for rotation in rotations %}
+      {% set active_members = rotation.members | selectattr('is_active') | list %}
+      <tr>
+        <td style="font-weight:500;">{{ rotation.name }}</td>
+        <td class="text-muted" style="font-size:.85rem;">
+          {{ org_map.get(rotation.close_org_id, rotation.close_org_id) }}
+        </td>
+        <td class="text-muted" style="font-size:.85rem;">
+          {{ rotation.owner.email if rotation.owner else '—' }}
+        </td>
+        <td>
+          {{ rotation.members | length }}
+          {% if active_members | length < rotation.members | length %}
+            <span class="text-muted" style="font-size:.8rem;">({{ active_members | length }} active)</span>
+          {% endif %}
+        </td>
+        <td>{{ rotation.queues.count() }}</td>
+        <td class="text-muted">{{ rotation.created_at.strftime('%b %d, %Y') }}</td>
+      </tr>
+      {# Expand members and lead lists inline #}
+      {% if rotation.members or rotation.queues.count() > 0 %}
+      <tr>
+        <td colspan="6" style="padding:.5rem .75rem 1rem 2rem; background:var(--border-light);">
+          {% if rotation.members %}
+          <div style="margin-bottom:.5rem;">
+            <span style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted-dark);">Members</span>
+            <span style="font-size:.85rem; color:var(--text-secondary); margin-left:.5rem;">
+              {% for m in rotation.members %}
+                <span style="margin-right:.75rem;">
+                  {{ m.close_user_name or m.close_user_email }}
+                  {% if not m.is_active %}<span class="text-muted">(inactive)</span>{% endif %}
+                </span>
+              {% endfor %}
+            </span>
+          </div>
+          {% endif %}
+          {% set qs = rotation.queues.all() %}
+          {% if qs %}
+          <div>
+            <span style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted-dark);">Lead Lists</span>
+            <span style="font-size:.85rem; color:var(--text-secondary); margin-left:.5rem;">
+              {% for q in qs %}
+                {{ q.name }}
+                <span class="badge {% if q.status == 'active' %}badge-green{% elif q.status == 'failed' %}badge-red{% elif q.status == 'running' %}badge-blue{% else %}badge-gray{% endif %}" style="font-size:.65rem;">{{ q.status }}</span>
+                {% if not loop.last %}&nbsp;·&nbsp;{% endif %}
+              {% endfor %}
+            </span>
+          </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No groups yet.</p>
+  {% endif %}
+</div>
+
+{# ── Lead Lists ── #}
+<h2 class="admin-section-title" id="lead-lists">Lead Lists</h2>
+<div class="card" style="margin-bottom:2.5rem;">
+  {% if queues %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Group</th>
+        <th>Organization</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Configured</th>
+        <th>Last Checked</th>
+        <th>Assignments</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for queue in queues %}
+      <tr>
+        <td style="font-weight:500;">{{ queue.name }}</td>
+        <td class="text-muted" style="font-size:.85rem;">
+          {{ queue.rotation.name if queue.rotation else '—' }}
+        </td>
+        <td class="text-muted" style="font-size:.85rem;">
+          {% if queue.rotation %}
+            {{ org_map.get(queue.rotation.close_org_id, queue.rotation.close_org_id) }}
+          {% else %}—{% endif %}
+        </td>
+        <td class="text-muted" style="font-size:.85rem;">{{ queue.type_label }}</td>
+        <td>
+          {% if queue.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+          {% elif queue.status == 'running' %}
+            <span class="badge badge-blue">Running</span>
+          {% elif queue.status == 'failed' %}
+            <span class="badge badge-red">Failed</span>
+          {% elif queue.status == 'completed' %}
+            <span class="badge badge-gray">Completed</span>
+          {% elif queue.status == 'paused' %}
+            <span class="badge badge-gray">Paused</span>
+          {% else %}
+            <span class="badge badge-gray">{{ queue.status | capitalize }}</span>
+          {% endif %}
+        </td>
+        <td style="text-align:center;">
+          {% if queue.is_configured %}
+            <span style="color:var(--primary);">&#10003;</span>
+          {% else %}
+            <span style="color:var(--danger);" title="Missing filters or custom field">&#9888;</span>
+          {% endif %}
+        </td>
+        <td class="text-muted" style="font-size:.85rem;">
+          {% if queue.last_checked_at %}
+            {{ queue.last_checked_at.strftime('%b %d, %Y %H:%M') }}
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td style="font-size:.85rem;">{{ queue.assignment_logs.count() }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No lead lists yet.</p>
+  {% endif %}
+</div>
+
+{% endblock %}
