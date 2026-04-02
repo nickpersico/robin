@@ -36,7 +36,7 @@ def superadmin_required(f):
 # Super-admin dashboard
 # ---------------------------------------------------------------------------
 
-@admin_bp.route("/admin")
+@admin_bp.route("/system")
 @login_required
 @superadmin_required
 def superadmin_dashboard():
@@ -61,7 +61,7 @@ def superadmin_dashboard():
     )
 
 
-@admin_bp.route("/admin/organizations/<org_id>")
+@admin_bp.route("/system/organizations/<org_id>")
 @login_required
 @superadmin_required
 def superadmin_org(org_id):
