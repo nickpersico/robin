@@ -130,6 +130,13 @@
   <h1>Help</h1>
 </div>
 
+{% if not current_user.is_authenticated %}
+<div class="help-callout info" style="margin-bottom:1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+  <span><strong>Ready to try Robin?</strong> Sign in with your Close account to get started for free.</span>
+  <a href="{{ url_for('auth.login') }}" class="btn btn-primary" style="white-space:nowrap; flex-shrink:0;">Sign in with Close</a>
+</div>
+{% endif %}
+
 <div class="help-layout">
 
   {# ── Table of contents ── #}

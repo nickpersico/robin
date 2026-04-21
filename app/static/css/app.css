@@ -279,10 +279,51 @@ a:hover { color: var(--primary-hover); text-decoration: underline; }
   padding: 2rem 2rem;
 }
 
-/* Unauthenticated: no sidebar offset, full-width landing page */
+/* Unauthenticated: no sidebar offset */
 body:not(.authenticated) .main-content { margin-left: 0; }
 body:not(.authenticated) .app-layout { display: block; }
-body:not(.authenticated) .container { max-width: none; padding: 0; }
+/* Landing page only: strip container constraints so hero is full-width */
+body:not(.authenticated) .container:has(.landing-page) { max-width: none; padding: 0; }
+
+/* Public top bar (unauthenticated pages other than landing) */
+.public-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  height: 52px;
+  background: #241d19;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.public-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  text-decoration: none;
+  color: #fff;
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.public-topbar-brand img {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+.public-topbar-signin {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(255,255,255,.75);
+  text-decoration: none;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 6px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.public-topbar-signin:hover {
+  color: #fff;
+  border-color: rgba(255,255,255,.5);
+}
 
 
 /* --------------------------------------------------------------------------
