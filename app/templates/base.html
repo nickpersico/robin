@@ -31,6 +31,17 @@
 </head>
 <body class="{% if current_user.is_authenticated %}authenticated{% endif %}">
 
+{% if not current_user.is_authenticated %}
+  {% block public_topbar %}
+  <header class="public-topbar">
+    <a href="{{ url_for('main.index') }}" class="public-topbar-brand">
+      <img src="{{ url_for('static', filename='img/robin-logo.png') }}" alt="Robin">
+      <span>Robin</span>
+    </a>
+  </header>
+  {% endblock %}
+{% endif %}
+
 {% if current_user.is_authenticated %}
   {# ── MOBILE TOP BAR ── #}
   <div class="mobile-topbar">
