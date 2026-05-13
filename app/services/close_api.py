@@ -221,3 +221,78 @@ class CloseClient:
         The Close API expects the key as 'custom.{field_id}'.
         """
         return self._put(f"/lead/{lead_id}/", json={f"custom.{custom_field_id}": user_id})
+
+    def get_workflows(self) -> List[dict]:
+        """
+        Return Close Workflows (Sequences) that Robin can trigger on Leads.
+        Close still exposes Workflows under the /sequence/ endpoint — only
+        sequences with status='active' and no attached schedule are eligible
+        (scheduled ones are triggered by Close itself, not by Robin).
+        """
+        data = self._get("/sequence/")
+        workflows = []
+        for s in data.get("data", []):
+            if s.get("status") != "active":
+                continue
+            # Manually-triggerable workflows have no schedule attached.
+            if s.get("schedule_id"):
+                continue
+            workflows.append({"id": s["id"], "name": s.get("name", s["id"])})
+        return sorted(workflows, key=lambda w: w["name"].lower())
+
+    def get_user_email_accounts(self, close_user_id: str) -> List[dict]:
+        """
+        Return the active email connected accounts the given Close user can
+        send from. Each entry has id/email/display_name keys.
+        """
+        data = self._get("/connected_account/", params={"user_id": close_user_id})
+        accounts = []
+        for a in data.get("data", []):
+            if a.get("status") and a["status"] != "active":
+                continue
+            email = a.get("email") or a.get("identities", [{}])[0].get("email")
+            if not email:
+                continue
+            accounts.append({
+                "id": a["id"],
+                "email": email,
+                "display_name": a.get("display_name") or "",
+            })
+        return accounts
+
+    def subscribe_lead_to_workflow(
+        self,
+        lead_id: str,
+        workflow_id: str,
+        sender_account_id: str,
+        sender_name: str,
+        sender_email: str,
+    ) -> dict:
+        """
+        Trigger a Close Workflow (Sequence) on a Lead. Close subscribes a
+        contact (not a lead) to a sequence, so we fetch the lead and pick
+        its first contact. The sender fields tell Close which email account
+        to send email steps from; they are required for email-step workflows
+        and harmless for SMS/call-only workflows.
+        """
+        lead = self.get_lead(lead_id)
+        contacts = lead.get("contacts") or []
+        if not contacts:
+            raise CloseAPIError(
+                f"Lead {lead_id} has no contacts; cannot trigger workflow."
+            )
+        contact_id = contacts[0].get("id")
+        if not contact_id:
+            raise CloseAPIError(
+                f"Lead {lead_id}'s first contact has no id; cannot trigger workflow."
+            )
+        return self._post(
+            "/sequence_subscription/",
+            json={
+                "sequence_id": workflow_id,
+                "contact_id": contact_id,
+                "sender_account_id": sender_account_id,
+                "sender_name": sender_name,
+                "sender_email": sender_email,
+            },
+        )

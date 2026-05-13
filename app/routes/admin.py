@@ -42,12 +42,12 @@ def superadmin_required(f):
 def superadmin_dashboard():
     from ..models.organization import Organization
     from ..models.rotation import Rotation
-    from ..models.queue import Queue
+    from ..models.lead_list import LeadList
 
     organizations = Organization.query.order_by(Organization.name).all()
     users = User.query.order_by(User.created_at.desc()).all()
     rotations = Rotation.query.order_by(Rotation.close_org_id, Rotation.name).all()
-    queues = Queue.query.order_by(Queue.created_at.desc()).all()
+    queues = LeadList.query.order_by(LeadList.created_at.desc()).all()
 
     org_map = {o.close_org_id: (o.name or o.close_org_id) for o in organizations}
 

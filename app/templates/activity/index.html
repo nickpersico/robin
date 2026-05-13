@@ -99,6 +99,7 @@
         </th>
         <th>Lead</th>
         <th>Assigned To</th>
+        <th>Workflow Triggered</th>
         <th>Lead List</th>
         <th>Group</th>
       </tr>
@@ -109,7 +110,7 @@
 
   {# Empty state #}
   <div id="empty-state" style="display:none; text-align:center; padding:3rem 1rem; color:var(--text-muted);">
-    <p style="margin:0; font-size:.95rem;">No assignments found.</p>
+    <p style="margin:0; font-size:.95rem;">No activity found.</p>
   </div>
 
   {# Infinite scroll sentinel + spinner #}
@@ -224,6 +225,46 @@
 
   /* Total badge */
   .activity-total { font-size: 0.9rem; font-weight: 500; }
+
+  /* When-column tooltip */
+  .when-cell {
+    position: relative;
+    cursor: default;
+    border-bottom: 1px dotted var(--text-muted);
+  }
+  .when-cell::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    padding: 0.35rem 0.55rem;
+    background: #1f2937;
+    color: #fff;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    border-radius: 4px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .when-cell::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 12px;
+    border: 4px solid transparent;
+    border-top-color: #1f2937;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+  }
+  .when-cell:hover::after,
+  .when-cell:hover::before {
+    opacity: 1;
+  }
 </style>
 
 <script>
@@ -254,13 +295,18 @@
     return days + 'd ago';
   }
 
-  function fmtDate(iso) {
-    var d = new Date(iso);
-    var str = d.toLocaleString(undefined, {
-      month: 'short', day: 'numeric', year: 'numeric',
-      hour: 'numeric', minute: '2-digit'
+  function fullTimestamp(d) {
+    return d.toLocaleString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
     });
-    return str + '  (' + timeAgo(d) + ')';
+  }
+
+  function whenCellHtml(iso) {
+    var d = new Date(iso);
+    return '<span class="when-cell" data-tooltip="' + escAttr(fullTimestamp(d)) + '">' +
+             escHtml(timeAgo(d)) +
+           '</span>';
   }
 
   function getChecked(name) {
@@ -311,35 +357,60 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         // Update total
-        var noun = data.total === 1 ? 'lead' : 'leads';
-        totalEl.textContent = data.total + ' ' + noun + ' assigned';
+        var noun = data.total === 1 ? 'event' : 'events';
+        totalEl.textContent = data.total + ' ' + noun;
 
         // Append rows
         data.items.forEach(function (item) {
+          var assignedCell = item.close_user_name
+            ? escHtml(item.close_user_name)
+            : '<span style="color:var(--text-muted);">—</span>';
+
+          var workflowCell = '<span style="color:var(--text-muted);">—</span>';
+          if (item.workflow_name || item.workflow_id) {
+            var workflowText = escHtml(item.workflow_name || item.workflow_id);
+            if (item.workflow_subscription_id) {
+              workflowCell = '<a class="lead-link" target="_blank" rel="noopener" ' +
+                'href="https://app.close.com/workflows/' + encodeURIComponent(item.workflow_id) +
+                '/runs/' + encodeURIComponent(item.workflow_subscription_id) + '">' +
+                workflowText + '</a>';
+            } else {
+              workflowCell = workflowText;
+            }
+          }
+
+          var groupCell = item.rotation_id
+            ? '<a href="/groups/' + encodeURIComponent(item.rotation_id) + '">' + escHtml(item.rotation_name) + '</a>'
+            : '<span style="color:var(--text-muted);">—</span>';
+
           var tr = document.createElement('tr');
           tr.innerHTML =
-            '<td style="white-space:nowrap;">' + fmtDate(item.assigned_at) + '</td>' +
+            '<td style="white-space:nowrap;">' + whenCellHtml(item.assigned_at) + '</td>' +
             '<td><a class="lead-link" href="https://app.close.com/lead/' + item.close_lead_id + '/" target="_blank" rel="noopener">' +
               escHtml(item.close_lead_name) + '</a></td>' +
-            '<td>' + escHtml(item.close_user_name) + '</td>' +
-            '<td><a href="/groups/' + item.rotation_id + '/lead-lists/' + item.queue_id + '">' +
+            '<td>' + assignedCell + '</td>' +
+            '<td>' + workflowCell + '</td>' +
+            '<td><a href="/lead-lists/' + encodeURIComponent(item.queue_id) + '">' +
               escHtml(item.queue_name) + '</a></td>' +
-            '<td><a href="/groups/' + item.rotation_id + '">' +
-              escHtml(item.rotation_name) + '</a></td>';
+            '<td>' + groupCell + '</td>';
           tbody.appendChild(tr);
         });
 
-        hasMore = data.has_more;
+        hasMore = !!data.has_more;
         nextOffset = data.next_offset || 0;
-
-        // Show/hide states
         emptyEl.style.display = (data.total === 0) ? 'block' : 'none';
-        sentinel.style.display = hasMore ? 'block' : 'none';
-        loading = false;
       })
       .catch(function () {
+        // On error, stop trying to load more so the user isn't stuck with a
+        // perpetual spinner.
+        hasMore = false;
+      })
+      .finally(function () {
+        // .finally runs whether the fetch succeeded or errored, so the
+        // sentinel is guaranteed to reflect the final hasMore state — no
+        // edge case can leave a spinner stuck on screen.
+        sentinel.style.display = hasMore ? 'block' : 'none';
         loading = false;
-        sentinel.style.display = 'none';
       });
   }
 
@@ -347,6 +418,10 @@
     var d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  function escAttr(s) {
+    return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   }
 
   function reset() {

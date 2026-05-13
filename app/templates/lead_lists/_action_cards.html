@@ -1,0 +1,268 @@
+{# ── Action cards: Assign + Workflow ─────────────────────────────────────────
+   Variables expected (all optional — sensible defaults used):
+     defaults: {
+       assign_enabled, rotation_id, custom_field_id, overwrite_existing,
+       workflow_enabled, workflow_id,
+     }
+     rotations:     iterable of Rotation (for assign action)
+     custom_fields: iterable of {id, name}
+     workflows:     iterable of {id, name}
+#}
+
+{% set d = defaults or {} %}
+
+<h3 style="margin:1.5rem 0 .25rem;">Actions</h3>
+<p class="text-muted" style="margin:0 0 1rem; font-size:.875rem;">
+  Enable one or more actions to run on each new matching lead.
+</p>
+
+{# ── Action 1: Assign a Lead ─────────────────────────────────────────────── #}
+<div class="card action-card" data-action="assign">
+  <label class="action-toggle">
+    <input type="checkbox" name="assign_enabled" value="1"
+           class="action-toggle-input"
+           {% if d.assign_enabled %}checked{% endif %}>
+    <span class="action-toggle-text">
+      <strong>Assign a Lead</strong>
+      <span class="text-muted" style="display:block; font-size:.85rem;">
+        Distribute leads round-robin to a Group of Close users.
+      </span>
+    </span>
+  </label>
+
+  <div class="action-body" {% if not d.assign_enabled %}style="display:none;"{% endif %}>
+    <div class="form-group">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.4rem;">
+        <label for="rotation_id" style="margin:0;">Group</label>
+        {% if enable_inline_group_create %}
+          <button type="button" id="open-new-group-modal" class="btn btn-outline btn-sm">+ New group</button>
+        {% endif %}
+      </div>
+      {% if rotations %}
+        <select id="rotation_id" name="rotation_id">
+          <option value="">— Select a group —</option>
+          {% for r in rotations %}
+            <option value="{{ r.id }}" {% if r.id == d.rotation_id %}selected{% endif %}>{{ r.name }}</option>
+          {% endfor %}
+        </select>
+      {% elif enable_inline_group_create %}
+        <p class="text-muted" id="no-groups-hint" style="margin:0;">
+          You don't have any Groups.
+          <a href="#" id="no-groups-create-link" style="color:#2563eb; text-decoration:underline;">Create one</a>.
+        </p>
+        <select id="rotation_id" name="rotation_id" style="display:none;">
+          <option value="">— Select a group —</option>
+        </select>
+      {% else %}
+        <p class="text-muted">
+          No groups yet.
+          <a href="{{ url_for('rotations.create_rotation') }}">Create one</a> first.
+        </p>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="custom_field_id">User custom field</label>
+      {% if custom_fields %}
+        <select id="custom_field_id" name="custom_field_id">
+          <option value="">— Select a field —</option>
+          {% for field in custom_fields %}
+            <option value="{{ field.id }}" {% if field.id == d.custom_field_id %}selected{% endif %}>
+              {{ field.name }}
+            </option>
+          {% endfor %}
+        </select>
+        <p class="text-muted" style="font-size:.82rem; margin:.35rem 0 0;">
+          Robin will write the assigned user's ID into this field on the lead.
+        </p>
+      {% else %}
+        <p class="text-muted">
+          No User-type custom fields found in your Close org.
+          <a href="https://app.close.com/settings/custom-fields/" target="_blank" rel="noopener">Create one in Close</a> first.
+        </p>
+      {% endif %}
+    </div>
+
+    <div class="form-group" style="margin-bottom:0;">
+      <label style="display:flex; align-items:flex-start; gap:.6rem; cursor:pointer; font-weight:normal;">
+        <input type="checkbox" name="overwrite_existing" value="1"
+               style="margin-top:.2rem; accent-color:#2563eb;"
+               {% if d.overwrite_existing %}checked{% endif %}>
+        <span>
+          <strong style="font-weight:600;">Overwrite existing values</strong><br>
+          <span class="text-muted" style="font-size:.875rem;">
+            If the selected field already has a value on a lead, Robin will overwrite it.
+            When unchecked, leads with an existing value are skipped.
+          </span>
+        </span>
+      </label>
+    </div>
+  </div>
+</div>
+
+{# ── Action 2: Trigger a Workflow ────────────────────────────────────────── #}
+<div class="card action-card" data-action="workflow">
+  <label class="action-toggle">
+    <input type="checkbox" name="workflow_enabled" value="1"
+           class="action-toggle-input"
+           {% if d.workflow_enabled %}checked{% endif %}>
+    <span class="action-toggle-text">
+      <strong>Trigger a Workflow</strong>
+      <span class="text-muted" style="display:block; font-size:.85rem;">
+        Trigger a Close Workflow on the lead's first contact.
+      </span>
+    </span>
+  </label>
+
+  <div class="action-body" {% if not d.workflow_enabled %}style="display:none;"{% endif %}>
+    <div class="form-group">
+      <label for="workflow_id">Workflow</label>
+      {% if workflows %}
+        <select id="workflow_id" name="workflow_id">
+          <option value="">— Select a workflow —</option>
+          {% for w in workflows %}
+            <option value="{{ w.id }}" {% if w.id == d.workflow_id %}selected{% endif %}>{{ w.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="text-muted" style="font-size:.82rem; margin:.35rem 0 0;">
+          Robin can only trigger Workflows that can be manually triggered on Leads.
+        </p>
+      {% else %}
+        <p class="text-muted">
+          No manually-triggerable Workflows found in your Close org.
+          <a href="https://app.close.com/sequences/" target="_blank" rel="noopener">Create one in Close</a> first.
+        </p>
+      {% endif %}
+    </div>
+
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="workflow_run_as_user_id">Run workflow as</label>
+      {% if org_users %}
+        <select id="workflow_run_as_user_id" name="workflow_run_as_user_id">
+          <option value="" {% if not d.workflow_run_as_user_id %}selected{% endif %}
+                  data-requires-assign="true">
+            Use the assigned member
+          </option>
+          {% for u in org_users %}
+            {% set display_name = ((u.first_name or '') + ' ' + (u.last_name or '')) | trim or u.email or u.id %}
+            <option value="{{ u.id }}" {% if u.id == d.workflow_run_as_user_id %}selected{% endif %}>
+              {{ display_name }}{% if u.email %} <{{ u.email }}>{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <p class="text-muted" style="font-size:.82rem; margin:.35rem 0 0;" id="run-as-hint">
+          Email steps send from this user's connected email account in Close.
+        </p>
+      {% else %}
+        <p class="text-muted">Could not load Close users — try reloading.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<style>
+  .action-card { padding: 1.1rem 1.25rem; }
+  .action-toggle { display: flex; align-items: flex-start; gap: .75rem; cursor: pointer; font-weight: normal; margin: 0; }
+  .action-toggle-input { margin-top: .25rem; accent-color: #2563eb; width: 1.05rem; height: 1.05rem; }
+  .action-toggle-text strong { font-weight: 600; }
+  .action-body { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
+</style>
+
+<script>
+(function () {
+  function setup() {
+    // Expand/collapse each action card's body when its toggle changes.
+    document.querySelectorAll('.action-card').forEach(function (card) {
+      var input = card.querySelector('.action-toggle-input');
+      var body  = card.querySelector('.action-body');
+      if (!input || !body) return;
+      input.addEventListener('change', function () {
+        body.style.display = input.checked ? '' : 'none';
+        recheck();
+      });
+    });
+
+    // ── Submit-button watchdog ──────────────────────────────────────────────
+    // The submit button lives AFTER this partial in the page, so we look it up
+    // here (inside setup, after DOMContentLoaded) — not at script-eval time.
+    var submitBtn = document.getElementById('submit-btn');
+    var nameEl    = document.getElementById('name');
+    var filtersEl = document.getElementById('filters_json');
+
+    var assignCheckbox = document.querySelector('input[name="assign_enabled"]');
+    var rotationSel    = document.getElementById('rotation_id');
+    var customFieldSel = document.getElementById('custom_field_id');
+
+    var workflowCheckbox = document.querySelector('input[name="workflow_enabled"]');
+    var workflowSel      = document.getElementById('workflow_id');
+    var runAsSel         = document.getElementById('workflow_run_as_user_id');
+    var inheritOption    = runAsSel && runAsSel.querySelector('option[data-requires-assign="true"]');
+
+    function val(el) { return el && el.value ? el.value.trim() : ''; }
+
+    function syncInheritOption() {
+      // "Use the assigned member" only makes sense when Assign is enabled.
+      // Disable that option (and force a re-pick) when Assign is off.
+      if (!runAsSel || !inheritOption) return;
+      var assignOn = assignCheckbox && assignCheckbox.checked;
+      inheritOption.disabled = !assignOn;
+      if (!assignOn && runAsSel.value === '') {
+        // Leave it blank (which is now invalid) — the watchdog will keep
+        // the submit button disabled until the user picks a real user.
+        runAsSel.selectedIndex = -1;
+      }
+    }
+
+    function isFormValid() {
+      if (!val(nameEl)) return false;
+      if (!val(filtersEl)) return false;
+
+      var assignOn   = assignCheckbox && assignCheckbox.checked;
+      var workflowOn = workflowCheckbox && workflowCheckbox.checked;
+      if (!assignOn && !workflowOn) return false;
+
+      if (assignOn) {
+        if (!val(rotationSel))    return false;
+        if (!val(customFieldSel)) return false;
+      }
+      if (workflowOn) {
+        if (!val(workflowSel)) return false;
+        // Run-as: either a specific user is picked, or "Use the assigned
+        // member" (empty value) when Assign is on.
+        if (runAsSel) {
+          var runAsVal = runAsSel.value;
+          if (!runAsVal && !assignOn) return false;
+        }
+      }
+      return true;
+    }
+
+    function recheck() {
+      syncInheritOption();
+      if (!submitBtn) return;
+      submitBtn.disabled = !isFormValid();
+    }
+
+    [nameEl, filtersEl, rotationSel, customFieldSel, workflowSel, runAsSel].forEach(function (el) {
+      if (!el) return;
+      el.addEventListener('input',  recheck);
+      el.addEventListener('change', recheck);
+    });
+    [assignCheckbox, workflowCheckbox].forEach(function (el) {
+      if (el) el.addEventListener('change', recheck);
+    });
+
+    recheck();
+
+    // Exposed so the inline-group modal can re-trigger validation after it
+    // programmatically updates fields.
+    window.__leadListRecheck = recheck;
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup);
+  } else {
+    setup();
+  }
+})();
+</script>

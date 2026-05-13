@@ -1,137 +1,57 @@
 {% extends "base.html" %}
-{% block title %}{% if current_user.is_authenticated %}Groups{% else %}Robin{% endif %}{% endblock %}
+{% block title %}Robin{% endblock %}
 
 {% block public_topbar %}{% endblock %}
 
 {% block content %}
-{% if current_user.is_authenticated %}
-
-  {# ── ROTATIONS DASHBOARD ── #}
-  <div class="page-header">
-    <h1>Groups</h1>
-    {% if current_user.is_active_user %}
-      <a href="{{ url_for('rotations.create_rotation') }}" class="btn btn-primary">+ New group</a>
-    {% endif %}
+{# ── SIGNED-OUT LANDING PAGE ── #}
+<div class="landing-page">
+  <div class="landing-hero">
+    <img src="{{ url_for('static', filename='img/robin-logo.png') }}" alt="Robin">
+    <h1>Robin</h1>
+    <p class="landing-tagline">Erithacus rubecula — the faithful distributor</p>
   </div>
 
-  {% if rotations %}
-    {% for rotation in rotations %}
-    <a href="{{ url_for('rotations.view_rotation', rotation_id=rotation.id) }}" class="rotation-card">
-      <div class="rotation-card-header">
-        <div>
-          <h3>{{ rotation.name }}</h3>
-          {% if rotation.description %}
-            <p class="text-muted" style="margin:0; font-size:.85rem;">{{ rotation.description }}</p>
-          {% endif %}
-        </div>
-      </div>
-      <div class="rotation-card-stats">
-        <span>
-          <strong>{{ rotation.members | length }}</strong>
-          member{{ 's' if rotation.members | length != 1 }}
-        </span>
-        <span>
-          <strong>{{ rotation.queue_count }}</strong>
-          lead list{{ 's' if rotation.queue_count != 1 }}
-        </span>
-        <span>Next up:
-          {% set next = rotation.next_member() %}
-          {% if next %}
-            <strong>{{ next.close_user_name or next.close_user_email }}</strong>
-          {% else %}
-            <em style="color:var(--text-muted);">No active members</em>
-          {% endif %}
-        </span>
-        {% if rotation.last_assignment_at %}
-          <span>Last assigned:
-            <strong class="local-time" data-utc="{{ rotation.last_assignment_at.strftime('%Y-%m-%dT%H:%M:%S') }}Z">
-              {{ rotation.last_assignment_at.strftime('%b %d') }}
-            </strong>
-          </span>
-        {% endif %}
-      </div>
-    </a>
-    {% endfor %}
-  {% else %}
-    <div class="card" style="text-align:center; padding:3.5rem 2rem;">
-      <p style="font-size:1.1rem; font-weight:500; color:var(--text-secondary); margin:0 0 .5rem;">No groups yet</p>
-      <p class="text-muted" style="margin:0 0 1.25rem;">Create your first group to start automatically assigning leads in Close.</p>
-      {% if current_user.is_active_user %}
-        <a href="{{ url_for('rotations.create_rotation') }}" class="btn btn-primary">
-          Create a group
-        </a>
-      {% endif %}
-    </div>
-  {% endif %}
-
-{% else %}
-
-  {# ── SIGNED-OUT LANDING PAGE ── #}
-  <div class="landing-page">
-    <div class="landing-hero">
-      <img src="{{ url_for('static', filename='img/robin-logo.png') }}" alt="Robin">
-      <h1>Robin</h1>
-      <p class="landing-tagline">Erithacus rubecula — the faithful distributor</p>
-    </div>
-
-    <div class="landing-video">
-      <iframe
-        src="https://www.youtube.com/embed/mClzb9Bo2Qw"
-        title="Robin demo"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowfullscreen>
-      </iframe>
-    </div>
-
-    <div class="landing-features-card">
-      <ul class="landing-features">
-        <li>
-          <strong>Automatic round-robin assignment </strong> &rarr; Create groups of Close users and Robin will assign new leads in order.
-        </li>
-        <li>
-          <strong>Continuous monitoring</strong> &rarr; Robin checks Close every 5 minutes
-          for new leads matching your saved search conditions.
-        </li>
-        <li>
-          <strong>Built for Close</strong> &rarr; While not an official product from Close, Robin was built and is maintained by a Close employee.
-        </li>
-      </ul>
-    </div>
-
-    <a href="{{ url_for('auth.login') }}" class="btn-close-signin">
-      <img src="{{ url_for('static', filename='img/close-mark.svg') }}" alt="">
-      Sign in with Close
-    </a>
+  <div class="landing-video">
+    <iframe
+      src="https://www.youtube.com/embed/mClzb9Bo2Qw"
+      title="Robin demo"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowfullscreen>
+    </iframe>
   </div>
 
-  <footer class="landing-footer">
-    <span>Robin &bull; This app is not officially supported or maintained by Close.</span>
-    <span>
-      <a href="https://github.com/nickpersico/robin" target="_blank" rel="noopener">GitHub</a>
-      &nbsp;·&nbsp;
-      <a href="{{ url_for('help.index') }}">Help</a>
-      &nbsp;·&nbsp;
-      <a href="{{ url_for('legal.terms') }}">Terms of Service</a>
-      &nbsp;·&nbsp;
-      <a href="{{ url_for('legal.privacy') }}">Privacy Policy</a>
-    </span>
-  </footer>
+  <div class="landing-features-card">
+    <ul class="landing-features">
+      <li>
+        <strong>Automatic round-robin assignment </strong> &rarr; Create groups of Close users and Robin will assign new leads in order.
+      </li>
+      <li>
+        <strong>Continuous monitoring</strong> &rarr; Robin checks Close every 5 minutes
+        for new leads matching your saved search conditions.
+      </li>
+      <li>
+        <strong>Built for Close</strong> &rarr; While not an official product from Close, Robin was built and is maintained by a Close employee.
+      </li>
+    </ul>
+  </div>
 
-{% endif %}
-{% endblock %}
+  <a href="{{ url_for('auth.login') }}" class="btn-close-signin">
+    <img src="{{ url_for('static', filename='img/close-mark.svg') }}" alt="">
+    Sign in with Close
+  </a>
+</div>
 
-{% block scripts %}
-{% if current_user.is_authenticated %}
-<script>
-(function () {
-  function formatLocalDate(isoStr) {
-    var d = new Date(isoStr);
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  }
-  document.querySelectorAll('.local-time').forEach(function (el) {
-    el.textContent = formatLocalDate(el.dataset.utc);
-  });
-})();
-</script>
-{% endif %}
+<footer class="landing-footer">
+  <span>Robin &bull; This app is not officially supported or maintained by Close.</span>
+  <span>
+    <a href="https://github.com/nickpersico/robin" target="_blank" rel="noopener">GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('help.index') }}">Help</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('legal.terms') }}">Terms of Service</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('legal.privacy') }}">Privacy Policy</a>
+  </span>
+</footer>
 {% endblock %}

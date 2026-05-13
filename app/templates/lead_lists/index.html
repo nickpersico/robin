@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Lead Lists{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Lead Lists</h1>
+  {% if current_user.is_active_user %}
+    <a href="{{ url_for('lead_lists.create_lead_list') }}" class="btn btn-primary">+ New lead list</a>
+  {% endif %}
+</div>
+
+{% if lead_lists %}
+  <div class="card" style="padding:0;">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Group</th>
+          <th>Status</th>
+          <th>Last Checked</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lead_list in lead_lists %}
+        <tr>
+          <td>
+            <a href="{{ url_for('lead_lists.view_lead_list', lead_list_id=lead_list.id) }}">
+              {{ lead_list.name }}
+            </a>
+          </td>
+          <td class="text-muted" style="font-size:.85rem;">
+            {% if lead_list.rotation %}
+              <a href="{{ url_for('rotations.view_rotation', rotation_id=lead_list.rotation.id) }}">{{ lead_list.rotation.name }}</a>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td>
+            {% if lead_list.status == 'active' %}
+              <span class="badge badge-green">Active</span>
+            {% elif lead_list.status == 'paused' %}
+              <span class="badge badge-gray">Paused</span>
+            {% elif lead_list.status == 'completed' %}
+              <span class="badge badge-gray">Completed</span>
+            {% elif lead_list.status == 'failed' %}
+              <span class="badge badge-red">Failed</span>
+            {% else %}
+              <span class="badge badge-gray">{{ lead_list.status }}</span>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;">
+            {% if lead_list.last_checked_at %}
+              <span class="local-datetime" data-utc="{{ lead_list.last_checked_at.strftime('%Y-%m-%dT%H:%M:%S') }}Z">
+                {{ lead_list.last_checked_at.strftime('%b %d, %Y %-I:%M%p') }}
+              </span>
+            {% else %}
+              <span class="text-muted">Never</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right; white-space:nowrap;">
+            <a href="{{ url_for('lead_lists.view_lead_list', lead_list_id=lead_list.id) }}" class="btn btn-outline btn-sm">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="card" style="text-align:center; padding:3.5rem 2rem;">
+    <p style="font-size:1.1rem; font-weight:500; color:var(--text-secondary); margin:0 0 .5rem;">No lead lists yet</p>
+    <p class="text-muted" style="margin:0 0 1.25rem;">
+      Create a lead list to assign new Close leads or trigger a Workflow when they appear.
+    </p>
+    {% if current_user.is_active_user %}
+      <a href="{{ url_for('lead_lists.create_lead_list') }}" class="btn btn-primary">Create a lead list</a>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% include "lead_lists/_check_now_js.html" %}
+<script>
+(function () {
+  function timeAgo(date) {
+    var secs = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (secs < 60)  return 'just now';
+    var mins = Math.floor(secs / 60);
+    if (mins < 60)  return mins + ' minute' + (mins === 1 ? '' : 's') + ' ago';
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24)   return hrs + ' hour' + (hrs === 1 ? '' : 's') + ' ago';
+    var days = Math.floor(hrs / 24);
+    return days + ' day' + (days === 1 ? '' : 's') + ' ago';
+  }
+  function formatLocalDateTime(iso) {
+    var d = new Date(iso);
+    var opts = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
+    return d.toLocaleString(undefined, opts);
+  }
+  document.querySelectorAll('.local-datetime').forEach(function (el) {
+    var d = new Date(el.dataset.utc);
+    el.textContent = formatLocalDateTime(el.dataset.utc) + '  (' + timeAgo(d) + ')';
+  });
+})();
+</script>
+{% endblock %}

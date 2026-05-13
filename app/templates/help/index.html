@@ -143,8 +143,14 @@
   <nav class="help-toc" id="help-toc">
     <a href="#demo">Watch a demo</a>
     <a href="#how-robin-works">How Robin works</a>
-    <a href="#groups">Groups</a>
     <a href="#lead-lists">Lead Lists</a>
+    <a href="#lead-lists-filter" class="sub">Filter</a>
+    <a href="#lead-lists-actions" class="sub">Actions</a>
+    <a href="#action-assign" class="sub">— Assign a Lead</a>
+    <a href="#action-workflow" class="sub">— Trigger a Workflow</a>
+    <a href="#lead-lists-status" class="sub">Statuses</a>
+    <a href="#lead-lists-seeding" class="sub">Seeding</a>
+    <a href="#groups">Groups</a>
     <a href="#assignment-engine">Assignment engine</a>
     <a href="#activity-log">Activity Log</a>
     <a href="#organizations">Organizations &amp; users</a>
@@ -152,10 +158,9 @@
     <a href="#edge-switching-orgs" class="sub">Switching organizations</a>
     <a href="#edge-pause-resume" class="sub">Pausing &amp; resuming</a>
     <a href="#edge-filter-change" class="sub">Changing filters</a>
+    <a href="#edge-run-as-no-email" class="sub">Workflow has no email account</a>
     <a href="#edge-new-users" class="sub">New users joining</a>
     <a href="#edge-inactive-members" class="sub">Inactive members</a>
-    <a href="#edge-completed" class="sub">Completed lead lists</a>
-    <a href="#edge-failed" class="sub">Failed lead lists</a>
     <a href="#support">Support</a>
   </nav>
 
@@ -177,126 +182,194 @@
     {# ── How Robin works ── #}
     <h2 id="how-robin-works">How Robin works</h2>
     <p>
-      Robin connects to your Close CRM organization and automatically assigns leads
-      to your team members in a fair, round-robin order. You define <strong>Groups</strong>
-      (who's in the rotation and in what order) and <strong>Lead Lists</strong>
-      (which leads should be assigned). Robin then polls your Close account every
-      five minutes and assigns any new leads it finds to the next person in line.
+      Robin connects to your Close CRM organization and watches for new leads that match
+      filters you define. When a matching lead appears, Robin runs the <strong>Actions</strong>
+      you've configured on it — assigning the lead round-robin to a teammate, triggering a
+      Workflow, or both.
     </p>
     <p>
-      The assignment cycle is: <strong>Lead List → find unassigned leads → assign to next Group member → advance the pointer → repeat.</strong>
-      Every assignment is recorded in the Activity Log so you always have a full audit trail.
+      You set this up with two objects:
+    </p>
+    <ul>
+      <li>
+        <strong>Lead Lists</strong> are the operational unit. Each one has a filter (which
+        leads qualify) and one or more Actions (what to do with each match). Lead Lists are
+        top-level — find them in the sidebar.
+      </li>
+      <li>
+        <strong>Groups</strong> are ordered rosters of Close users used by the
+        <em>Assign a Lead</em> action. One Group can power many Lead Lists.
+      </li>
+    </ul>
+    <p>
+      Robin polls Close every <strong>5 minutes</strong>. Every action it takes lands in the
+      Activity Log so you always have a full audit trail.
+    </p>
+
+    {# ── Lead Lists ── #}
+    <h2 id="lead-lists">Lead Lists</h2>
+    <p>
+      A Lead List is "when these leads appear in Close, do these things." It's the heart of
+      Robin — you'll spend most of your time here.
+    </p>
+
+    <h3 id="lead-lists-filter">Filter</h3>
+    <p>
+      The filter field accepts a Close Advanced Filter JSON object — the same query format
+      Close uses internally for its search. Build the filter in Close's search UI, then
+      paste the resulting query JSON into Robin. Robin passes this filter to the Close API
+      to find matching leads.
+    </p>
+    <div class="help-callout">
+      <strong>Tip:</strong> Robin accepts either the full search payload
+      (<code>{"limit": ..., "query": {...}}</code>) or just the inner query object
+      (<code>{"type": "and", "queries": [...]}</code>). It extracts the relevant part
+      automatically.
+    </div>
+
+    <h3 id="lead-lists-actions">Actions</h3>
+    <p>
+      Each Lead List runs one or more Actions on every matching lead. You can enable either
+      Action, or both. At least one must be enabled for the list to do anything.
+    </p>
+
+    <h3 id="action-assign">Action: Assign a Lead</h3>
+    <p>
+      Distributes the lead round-robin to a teammate. When enabled, you configure:
+    </p>
+    <ul>
+      <li><strong>Group</strong> — which roster to draw the next assignee from.</li>
+      <li><strong>User custom field</strong> — the Lead-level User-type custom field
+        Robin writes the assignee's Close user ID into.</li>
+      <li><strong>Overwrite existing values</strong> — if the field is already set on a
+        lead, overwrite it. When unchecked, leads with an existing value are skipped.</li>
+    </ul>
+    <p>
+      The Group's round-robin pointer advances after every successful assignment. If you
+      don't have a Group yet, the form lets you create one inline without leaving the
+      Lead List page.
+    </p>
+
+    <h3 id="action-workflow">Action: Trigger a Workflow</h3>
+    <p>
+      Enrolls the lead's first contact in a Close Workflow. When enabled, you configure:
+    </p>
+    <ul>
+      <li><strong>Workflow</strong> — pick one of your Close Workflows. Robin only
+        lists Workflows that can be manually triggered on Leads (Workflows on a schedule
+        are run by Close itself, not by Robin).</li>
+      <li><strong>Run workflow as</strong> — the Close user the Workflow "runs as."
+        Robin uses this user's connected email account to send email steps. Close uses
+        this user as the actor for other step types (SMS, calls, tasks) according to its
+        own rules — check Close's Workflows documentation for the exact behavior per
+        step type.</li>
+    </ul>
+    <p>
+      When <em>Assign a Lead</em> is also enabled, the default Run-as is
+      <strong>"Use the assigned member"</strong> — each lead's Workflow runs as whoever
+      Robin just assigned the lead to. For workflow-only Lead Lists you must pick a
+      specific user.
+    </p>
+
+    <h3 id="lead-lists-status">Statuses</h3>
+    <ul>
+      <li><span class="help-badge green">Active</span> — Robin polls this list every 5 minutes and runs the configured Actions on new matches.</li>
+      <li><span class="help-badge gray">Paused</span> — Polling is suspended. No actions will run until you resume.</li>
+    </ul>
+
+    <h3 id="lead-lists-seeding">Seeding</h3>
+    <p>
+      When a Lead List is first activated — and again whenever you change its filter or
+      resume it from paused — Robin runs a <strong>seed</strong> step. It fetches every
+      lead currently matching the filter and marks them as "already seen," so only leads
+      that appear <em>after</em> that moment will be acted on. This prevents Robin from
+      retroactively assigning or enrolling leads that were already in Close before the
+      list existed.
     </p>
 
     {# ── Groups ── #}
     <h2 id="groups">Groups</h2>
     <p>
-      A Group is an ordered list of Close users who will receive leads in turn.
-      Think of it as the roster for a particular team or territory.
+      A Group is an ordered list of Close users who receive leads in turn. Groups are
+      consumed by the <em>Assign a Lead</em> Action — a single Group can be reused across
+      many Lead Lists, and the round-robin pointer is shared across all of them so leads
+      stay evenly distributed.
     </p>
 
     <h3>Members</h3>
     <p>
-      Each member maps to a Close user (looked up by their Close user ID or email).
-      Members have two states:
+      Each member maps to a Close user. Members have two states:
     </p>
     <ul>
       <li><span class="help-badge green">Active</span> — eligible to receive the next lead.</li>
       <li><span class="help-badge gray">Inactive</span> — skipped entirely; does not advance the round-robin pointer.</li>
     </ul>
     <p>
-      You can toggle a member's status at any time on the Group edit page.
-      Only active members count toward the rotation order.
+      Only active members count toward the rotation order. Toggle a member's status at
+      any time from the Group edit page.
     </p>
 
     <h3>Next up</h3>
     <p>
       The Group detail page shows which member is <span class="help-badge blue">Next up</span> —
-      the person who will receive the very next lead assigned by any Lead List in this Group.
+      whoever will receive the very next assignment from any Lead List that uses this Group.
       The pointer advances automatically after each assignment.
+    </p>
+
+    <h3>Used by Lead Lists</h3>
+    <p>
+      The Group detail page lists every Lead List that currently uses this Group via its
+      Assign action, along with status and last-checked timestamp. Use this to see at a
+      glance what's flowing through a Group.
     </p>
 
     <h3>Leads assigned count</h3>
     <p>
       The "Leads Assigned" column on the Group detail page shows a lifetime count of how
-      many leads each member has received through Robin. This is a running total across
-      all Lead Lists in the Group and all time.
-    </p>
-
-    {# ── Lead Lists ── #}
-    <h2 id="lead-lists">Lead Lists</h2>
-    <p>
-      A Lead List defines <em>which</em> leads Robin should watch and assign. Each Lead List
-      belongs to exactly one Group and uses a Close saved-search filter to identify leads.
-    </p>
-
-    <h3>Filters</h3>
-    <p>
-      The filter field accepts a Close Advanced Filter JSON object — the same query format
-      Close uses internally for its search. You can build your filter in Close's search UI
-      and paste the resulting query JSON into Robin. Robin passes this filter directly to
-      the Close API to find matching leads.
-    </p>
-    <div class="help-callout">
-      <strong>Tip:</strong> Robin will accept either the full search payload
-      (<code>{"limit": ..., "query": {...}}</code>) or just the inner query object
-      (<code>{"type": "and", "queries": [...]}</code>). It extracts the relevant part
-      automatically.
-    </div>
-
-    <h3>Statuses</h3>
-    <ul>
-      <li><span class="help-badge green">Active</span> — Robin polls this list every 5 minutes and assigns new leads.</li>
-      <li><span class="help-badge gray">Paused</span> — Polling is suspended. No leads will be assigned until you resume.</li>
-      <li><span class="help-badge gray">Completed</span> — All leads matching the filter have been assigned. Robin stops polling automatically.</li>
-      <li><span class="help-badge red">Failed</span> — An error occurred during the last poll (e.g. an expired Close API token or invalid filter). Check the Lead List detail page for details, fix the issue, and resume.</li>
-    </ul>
-
-    <h3>Seeding</h3>
-    <p>
-      When a Lead List is first activated (or re-activated after a filter change or resume),
-      Robin performs a <strong>seed</strong> step. It fetches all leads currently matching
-      the filter and marks them as "already seen" — so only leads that appear <em>after</em>
-      that moment will be assigned. This prevents Robin from retroactively assigning leads
-      that were in Close before you set up the list.
+      many leads each member has received through Robin — a running total across all Lead
+      Lists that use this Group and all time.
     </p>
 
     {# ── Assignment engine ── #}
     <h2 id="assignment-engine">Assignment engine</h2>
     <p>
-      Robin's background scheduler runs every <strong>5 minutes</strong> and checks every
+      Robin's background scheduler runs every <strong>5 minutes</strong> and visits every
       active Lead List across all organizations. For each list, it:
     </p>
     <ol>
-      <li>Queries Close for leads matching the filter that were created or updated after the last check.</li>
-      <li>Compares those leads against already-assigned records to find new ones.</li>
-      <li>For each new lead, assigns it to the next active Group member in order.</li>
-      <li>Updates the Close lead record with the assigned owner via the Close API.</li>
-      <li>Logs the assignment to the Activity Log.</li>
-      <li>Advances the round-robin pointer to the next active member.</li>
-      <li>Updates <strong>Last Checked</strong> timestamp on the Lead List.</li>
+      <li>Queries Close for leads matching the filter that were created after the last check.</li>
+      <li>Drops any leads that were captured in the initial seed (so they're never retroactively acted on).</li>
+      <li>For each remaining new lead, runs the enabled Actions:
+        <ul>
+          <li>If <strong>Assign a Lead</strong> is on: picks the next active Group member, writes their Close user ID into the configured custom field, and advances the pointer.</li>
+          <li>If <strong>Trigger a Workflow</strong> is on: resolves the Run-as user (configured user, or the just-assigned member), looks up their connected email account, and subscribes the lead's first contact to the Workflow.</li>
+        </ul>
+      </li>
+      <li>Records the event in the Activity Log with whichever combination ran.</li>
+      <li>Updates <strong>Last Checked</strong> on the Lead List.</li>
     </ol>
     <p>
-      You can also trigger an immediate check using the <strong>Check now</strong> button
-      on the Group detail page — this runs the same logic outside of the 5-minute schedule.
+      You can also kick off an immediate check using the <strong>Check now</strong> button
+      on a Lead List detail page — this runs the same logic outside the 5-minute schedule.
     </p>
 
     {# ── Activity Log ── #}
     <h2 id="activity-log">Activity Log</h2>
     <p>
-      The Activity Log is a complete, time-ordered record of every lead assignment Robin
-      has made for your organization. It shows:
+      The Activity Log is a time-ordered record of every action Robin has taken for your
+      organization — assignments, workflow triggers, or both. It shows:
     </p>
     <ul>
-      <li><strong>When</strong> — the exact date and time of assignment, in your local timezone, with a relative "ago" label.</li>
-      <li><strong>Lead</strong> — the Close lead name, linking directly to that lead in Close.</li>
-      <li><strong>Assigned To</strong> — the Close user who received the lead.</li>
-      <li><strong>Lead List</strong> — which Lead List triggered the assignment.</li>
-      <li><strong>Group</strong> — which Group the Lead List belongs to.</li>
+      <li><strong>When</strong> — relative time (e.g. "6m ago"). Hover for the exact timestamp in your local timezone.</li>
+      <li><strong>Lead</strong> — the Close lead name, linking directly to the lead in Close.</li>
+      <li><strong>Assigned To</strong> — the Close user who received the lead (— for workflow-only events).</li>
+      <li><strong>Workflow Triggered</strong> — the Workflow name, linking to the specific run in Close (— for assignment-only events).</li>
+      <li><strong>Lead List</strong> — which Lead List produced the event.</li>
+      <li><strong>Group</strong> — the Group used by the Assign action (— for workflow-only events).</li>
     </ul>
     <p>
-      You can filter by timeframe, Group, Lead List, or assigned user, and search by lead name
-      or lead ID. The log is infinite-scrolling and loads 25 records at a time.
+      You can filter by timeframe, Group, Lead List, or assigned user, and search by lead
+      name or lead ID. The log is infinite-scrolling and loads 25 records at a time.
     </p>
 
     {# ── Organizations & users ── #}
@@ -375,6 +448,28 @@
       list so you're always aware this re-seed will happen.
     </p>
 
+    <h3 id="edge-run-as-no-email">Run-as user has no email account</h3>
+    <p>
+      To trigger a Workflow, Robin needs the Run-as user's connected email account in
+      Close (it supplies the <code>sender_account_id</code>, <code>sender_name</code>, and
+      <code>sender_email</code> to the sequence subscription). If that user hasn't connected
+      a sending email account in Close, Robin can't trigger the Workflow for that lead.
+    </p>
+    <p>
+      What happens:
+    </p>
+    <ul>
+      <li>If <strong>Assign a Lead</strong> is also enabled and succeeded — the assignment
+        is still recorded; only the Workflow trigger is skipped. The error is logged on
+        the server.</li>
+      <li>If <strong>Trigger a Workflow</strong> is the only Action — no Activity Log
+        entry is created for that lead. Robin moves on to the next one.</li>
+    </ul>
+    <p>
+      To fix: have the Run-as user connect an email account in Close (Settings → Connected
+      Accounts), or change the Lead List's Run-as to a different user who already has one.
+    </p>
+
     <h3 id="edge-new-users">New users joining an organization</h3>
     <p>
       When a new user from your Close org signs into Robin for the first time, their account
@@ -408,31 +503,6 @@
       They will receive the next lead when the pointer cycles back to their position.
       No leads are retroactively redistributed.
     </p>
-
-    <h3 id="edge-completed">Completed Lead Lists</h3>
-    <p>
-      A Lead List moves to <span class="help-badge gray">Completed</span> automatically when
-      Robin runs a poll and finds no unassigned leads matching the filter. This typically
-      means every lead in the filtered set has already been assigned.
-    </p>
-    <p>
-      A completed list stops polling. If new leads are later added to Close that would match
-      the filter, they won't be picked up unless you manually resume the list (which
-      triggers a re-seed as described above).
-    </p>
-
-    <h3 id="edge-failed">Failed Lead Lists</h3>
-    <p>
-      A Lead List enters <span class="help-badge red">Failed</span> state if an unrecoverable
-      error occurs during a poll — most commonly an expired Close API token, an invalid
-      filter, or a Close API outage.
-    </p>
-    <p>To recover:</p>
-    <ol>
-      <li>Check the Lead List detail page for the specific error message.</li>
-      <li>Fix the underlying issue (re-authorize Robin with Close, correct the filter JSON, etc.).</li>
-      <li>Click <strong>Resume</strong> on the Lead List detail page. Robin will re-seed and resume polling.</li>
-    </ol>
 
     {# ── Support ── #}
     <h2 id="support">Support</h2>

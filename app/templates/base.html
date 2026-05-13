@@ -79,8 +79,17 @@
 
     {# Navigation #}
     <nav class="sidebar-nav">
-      <a href="{{ url_for('main.index') }}"
-         {% if request.endpoint in ('main.index', 'rotations.list_rotations') %}class="active"{% endif %}>
+      <a href="{{ url_for('lead_lists.index') }}"
+         {% if request.endpoint and request.endpoint.startswith('lead_lists.') %}class="active"{% endif %}>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/>
+          <path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>
+        </svg>
+        Lead Lists
+      </a>
+      <a href="{{ url_for('rotations.list_rotations') }}"
+         {% if request.endpoint and request.endpoint.startswith('rotations.') %}class="active"{% endif %}>
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>

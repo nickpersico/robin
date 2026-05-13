@@ -154,11 +154,11 @@
             <span class="text-muted" style="font-size:.8rem;">({{ active_members | length }} active)</span>
           {% endif %}
         </td>
-        <td>{{ rotation.queues.count() }}</td>
+        <td>{{ rotation.lead_lists.count() }}</td>
         <td class="text-muted">{{ rotation.created_at.strftime('%b %d, %Y') }}</td>
       </tr>
       {# Expand members and lead lists inline #}
-      {% if rotation.members or rotation.queues.count() > 0 %}
+      {% if rotation.members or rotation.lead_lists.count() > 0 %}
       <tr>
         <td colspan="6" style="padding:.5rem .75rem 1rem 2rem; background:var(--border-light);">
           {% if rotation.members %}
@@ -174,7 +174,7 @@
             </span>
           </div>
           {% endif %}
-          {% set qs = rotation.queues.all() %}
+          {% set qs = rotation.lead_lists.all() %}
           {% if qs %}
           <div>
             <span style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted-dark);">Lead Lists</span>
