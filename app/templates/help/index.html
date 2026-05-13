@@ -161,7 +161,6 @@
     <a href="#edge-run-as-no-email" class="sub">Workflow has no email account</a>
     <a href="#edge-new-users" class="sub">New users joining</a>
     <a href="#edge-inactive-members" class="sub">Inactive members</a>
-    <a href="#edge-failed" class="sub">Failed lead lists</a>
     <a href="#support">Support</a>
   </nav>
 
@@ -260,8 +259,10 @@
         lists Workflows that can be manually triggered on Leads (Workflows on a schedule
         are run by Close itself, not by Robin).</li>
       <li><strong>Run workflow as</strong> — the Close user the Workflow "runs as."
-        Their email account sends emails, their phone sends SMS, and any call/task steps
-        are assigned to them.</li>
+        Robin uses this user's connected email account to send email steps. Close uses
+        this user as the actor for other step types (SMS, calls, tasks) according to its
+        own rules — check Close's Workflows documentation for the exact behavior per
+        step type.</li>
     </ul>
     <p>
       When <em>Assign a Lead</em> is also enabled, the default Run-as is
@@ -274,7 +275,6 @@
     <ul>
       <li><span class="help-badge green">Active</span> — Robin polls this list every 5 minutes and runs the configured Actions on new matches.</li>
       <li><span class="help-badge gray">Paused</span> — Polling is suspended. No actions will run until you resume.</li>
-      <li><span class="help-badge red">Failed</span> — An error occurred during the last poll (e.g. an expired Close API token or invalid filter). Check the Lead List detail page, fix the issue, and resume.</li>
     </ul>
 
     <h3 id="lead-lists-seeding">Seeding</h3>
@@ -503,19 +503,6 @@
       They will receive the next lead when the pointer cycles back to their position.
       No leads are retroactively redistributed.
     </p>
-
-    <h3 id="edge-failed">Failed Lead Lists</h3>
-    <p>
-      A Lead List enters <span class="help-badge red">Failed</span> state if an unrecoverable
-      error occurs during a poll — most commonly an expired Close API token, an invalid
-      filter, or a Close API outage.
-    </p>
-    <p>To recover:</p>
-    <ol>
-      <li>Check the Lead List detail page for the specific error message.</li>
-      <li>Fix the underlying issue (re-authorize Robin with Close, correct the filter JSON, etc.).</li>
-      <li>Click <strong>Resume</strong> on the Lead List detail page. Robin will re-seed and resume polling.</li>
-    </ol>
 
     {# ── Support ── #}
     <h2 id="support">Support</h2>
