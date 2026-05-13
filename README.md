@@ -7,16 +7,17 @@
 
 ---
 
-Robin connects to your Close organization and automatically assigns new leads to your team in a fair, round-robin order. You define **Groups** (who's in the rotation) and **Lead Lists** (which leads to watch), and Robin polls Close every five minutes to assign any new matches.
+Robin connects to your Close organization, watches for new leads that match filters you define, and runs configured Actions on each match — round-robin-assigning the lead to a teammate, triggering a Close Workflow on the lead's first contact, or both. You define **Lead Lists** (filter + Actions) and **Groups** (rotation rosters used by the Assign action). Robin polls Close every five minutes.
 
 > **Note:** Robin is an independent tool and is not officially affiliated with or supported by Close.
 
 ## Features
 
-- **Automatic round-robin assignment** — leads are distributed evenly across your team in order
+- **Lead Lists with configurable Actions** — each list pairs a Close Advanced Filter with one or both Actions: round-robin assignment to a Group, and/or triggering a Close Workflow on the lead's first contact
+- **Round-robin assignment** — leads are distributed evenly across your team; a single Group can power many Lead Lists, sharing one rotation pointer
+- **Workflow triggering** — enroll matching leads in any manually-triggerable Close Workflow, with a per-list "run as" user whose connected email account sends email steps
 - **Continuous monitoring** — polls Close every 5 minutes using the Advanced Filter API
-- **Multiple groups & lead lists** — run separate rotations for different teams or territories simultaneously
-- **Activity Log** — full audit trail of every assignment with filters by group, lead list, user, and date
+- **Activity Log** — full audit trail of every assignment and workflow trigger, with filters by Group, Lead List, user, timeframe, and lead search; workflow triggers deep-link to the run in Close
 - **Multi-org support** — one login can manage multiple Close organizations
 - **Admin controls** — approve users, manage roles, toggle member active/inactive status
 

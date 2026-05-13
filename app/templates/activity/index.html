@@ -396,17 +396,21 @@
           tbody.appendChild(tr);
         });
 
-        hasMore = data.has_more;
+        hasMore = !!data.has_more;
         nextOffset = data.next_offset || 0;
-
-        // Show/hide states
         emptyEl.style.display = (data.total === 0) ? 'block' : 'none';
-        sentinel.style.display = hasMore ? 'block' : 'none';
-        loading = false;
       })
       .catch(function () {
+        // On error, stop trying to load more so the user isn't stuck with a
+        // perpetual spinner.
+        hasMore = false;
+      })
+      .finally(function () {
+        // .finally runs whether the fetch succeeded or errored, so the
+        // sentinel is guaranteed to reflect the final hasMore state — no
+        // edge case can leave a spinner stuck on screen.
+        sentinel.style.display = hasMore ? 'block' : 'none';
         loading = false;
-        sentinel.style.display = 'none';
       });
   }
 
