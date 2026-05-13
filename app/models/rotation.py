@@ -34,8 +34,8 @@ class Rotation(db.Model):
         order_by="RotationMember.position",
         cascade="all, delete-orphan",
     )
-    queues = db.relationship(
-        "Queue",
+    lead_lists = db.relationship(
+        "LeadList",
         back_populates="rotation",
         cascade="all, delete-orphan",
         lazy="dynamic",

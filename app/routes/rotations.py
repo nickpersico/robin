@@ -2,6 +2,7 @@ from flask import (
     Blueprint,
     abort,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -10,6 +11,8 @@ from flask import (
 from flask_login import login_required, current_user
 
 from ..extensions import db
+from ..models.assignment_log import AssignmentLog
+from ..models.lead_list import LeadList
 from ..models.rotation import Rotation, RotationMember
 from ..services.close_api import CloseClient, CloseAPIError
 
@@ -24,15 +27,30 @@ def _get_rotation_or_404(rotation_id: str) -> Rotation:
 
 
 # ---------------------------------------------------------------------------
-# List
+# List (Groups dashboard)
 # ---------------------------------------------------------------------------
 
 
 @rotations_bp.route("/")
 @login_required
 def list_rotations():
-    # Consolidated into the main index — redirect to avoid stale bookmarks.
-    return redirect(url_for("main.index"))
+    rotations = (
+        Rotation.query
+        .filter_by(close_org_id=current_user.close_org_id)
+        .order_by(Rotation.created_at.desc())
+        .all()
+    )
+    for r in rotations:
+        r.lead_list_count = r.lead_lists.count()
+        last_log = (
+            AssignmentLog.query
+            .join(LeadList, AssignmentLog.queue_id == LeadList.id)
+            .filter(LeadList.rotation_id == r.id)
+            .order_by(AssignmentLog.assigned_at.desc())
+            .first()
+        )
+        r.last_assignment_at = last_log.assigned_at if last_log else None
+    return render_template("rotations/list.html", rotations=rotations)
 
 
 # ---------------------------------------------------------------------------
@@ -104,12 +122,12 @@ def create_rotation():
 def view_rotation(rotation_id: int):
     rotation = _get_rotation_or_404(rotation_id)
     member_counts = {m.id: m.assignment_count for m in rotation.members}
-    queues = rotation.queues.order_by("created_at").all()
+    lead_lists = rotation.lead_lists.order_by("created_at").all()
     return render_template(
         "rotations/detail.html",
         rotation=rotation,
         member_counts=member_counts,
-        queues=queues,
+        lead_lists=lead_lists,
     )
 
 
@@ -191,6 +209,65 @@ def delete_rotation(rotation_id: int):
     db.session.delete(rotation)
     db.session.commit()
     return redirect(url_for("main.index"))
+
+
+# ---------------------------------------------------------------------------
+# Inline create (JSON API used by the Lead List create modal)
+# ---------------------------------------------------------------------------
+
+
+@rotations_bp.route("/api/create", methods=["POST"])
+@login_required
+def api_create_rotation():
+    """
+    Create a Group from an AJAX request. Returns JSON so the caller (e.g. the
+    "Create a group" modal on the Lead List page) can splice the new group
+    into a dropdown without a full page reload.
+
+    Body: form-encoded (so it matches existing fetch() / FormData usage):
+      name=...&description=...&member_ids=u1&member_ids=u2
+    """
+    if current_user.is_pending:
+        return jsonify({"ok": False, "error": "Your account is pending approval."}), 403
+
+    name = request.form.get("name", "").strip()
+    description = request.form.get("description", "").strip()
+    member_ids = request.form.getlist("member_ids")
+
+    if not name:
+        return jsonify({"ok": False, "error": "Group name is required."}), 400
+    if not member_ids:
+        return jsonify({"ok": False, "error": "Select at least one member."}), 400
+
+    try:
+        client = CloseClient(current_user)
+        org_users = client.get_active_org_members()
+    except CloseAPIError as e:
+        return jsonify({"ok": False, "error": f"Could not load org users: {e}"}), 502
+
+    rotation = Rotation(
+        name=name,
+        description=description or None,
+        owner_id=current_user.id,
+        close_org_id=current_user.close_org_id,
+    )
+    db.session.add(rotation)
+    db.session.flush()
+
+    user_lookup = {u["id"]: u for u in org_users}
+    for position, close_user_id in enumerate(member_ids):
+        user_info = user_lookup.get(close_user_id, {})
+        member = RotationMember(
+            rotation_id=rotation.id,
+            close_user_id=close_user_id,
+            close_user_email=user_info.get("email", ""),
+            close_user_name=_display_name(user_info),
+            position=position,
+        )
+        db.session.add(member)
+
+    db.session.commit()
+    return jsonify({"ok": True, "group": {"id": rotation.id, "name": rotation.name}})
 
 
 # ---------------------------------------------------------------------------

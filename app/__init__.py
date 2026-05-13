@@ -25,6 +25,7 @@ def create_app(config_class=Config):
     from .routes.main import main_bp
     from .routes.auth import auth_bp
     from .routes.rotations import rotations_bp
+    from .routes.lead_lists import lead_lists_bp
     from .routes.queues import queues_bp
     from .routes.admin import admin_bp
     from .routes.activity import activity_bp
@@ -34,7 +35,8 @@ def create_app(config_class=Config):
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rotations_bp, url_prefix="/groups")
-    app.register_blueprint(queues_bp)
+    app.register_blueprint(lead_lists_bp)
+    app.register_blueprint(queues_bp)  # legacy URL redirects only
     app.register_blueprint(admin_bp)
     app.register_blueprint(activity_bp)
     app.register_blueprint(help_bp)
@@ -64,6 +66,13 @@ def create_app(config_class=Config):
         "rotations.create_rotation",
         "rotations.edit_rotation",
         "rotations.delete_rotation",
+        "lead_lists.create_lead_list",
+        "lead_lists.edit_lead_list",
+        "lead_lists.delete_lead_list",
+        "lead_lists.toggle_lead_list",
+        "lead_lists.check_lead_list",
+        # Legacy endpoints — still register them so users on stale tabs
+        # get blocked at the redirect step instead of after.
         "queues.create_queue",
         "queues.edit_queue",
         "queues.delete_queue",

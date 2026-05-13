@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ lead_list.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="text-muted" style="margin:0 0 .2rem; font-size:.85rem;">
+      <a href="{{ url_for('lead_lists.index') }}">Lead Lists</a>
+      &rsaquo;
+      <a href="{{ url_for('lead_lists.view_lead_list', lead_list_id=lead_list.id) }}">{{ lead_list.name }}</a>
+    </p>
+    <h1>Edit Lead List</h1>
+  </div>
+  <a href="{{ url_for('lead_lists.view_lead_list', lead_list_id=lead_list.id) }}" class="btn btn-outline btn-sm">Cancel</a>
+</div>
+
+{% if error %}
+  <div class="alert alert-warning">Could not load Close options: {{ error }}</div>
+{% endif %}
+
+{% set defaults = {
+  "assign_enabled":     (request.form.get('assign_enabled') == '1') if request.method == 'POST' else lead_list.assign_enabled,
+  "rotation_id":        request.form.get('rotation_id', lead_list.rotation_id or ''),
+  "custom_field_id":    request.form.get('custom_field_id', lead_list.custom_field_id or ''),
+  "overwrite_existing": (request.form.get('overwrite_existing') == '1') if request.method == 'POST' else lead_list.overwrite_existing,
+  "workflow_enabled":   (request.form.get('workflow_enabled') == '1') if request.method == 'POST' else lead_list.workflow_enabled,
+  "workflow_id":        request.form.get('workflow_id', lead_list.workflow_id or ''),
+} %}
+
+<form method="post">
+  <div class="card">
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="name">Lead list name</label>
+      <input type="text" id="name" name="name" value="{{ request.form.get('name', lead_list.name) }}" required>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 .75rem;">Filter</h3>
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="filters_json">Lead filter <span class="text-muted">(JSON from Close)</span></label>
+      {% include "lead_lists/_filter_help_modal.html" %}
+      <textarea id="filters_json" name="filters_json" rows="6" required
+                style="font-family: monospace; font-size: .85rem;"
+                placeholder='{"type":"and","queries":[]}'
+      >{{ request.form.get('filters_json', lead_list.filters_json | tojson(indent=2) if lead_list.filters_json else '') }}</textarea>
+      <p class="text-muted" style="font-size:.82rem; margin:.35rem 0 0;">
+        Changing this resets Robin's snapshot of existing leads.
+      </p>
+    </div>
+  </div>
+
+  {% include "lead_lists/_action_cards.html" %}
+
+  <div style="display:flex; justify-content:flex-end; gap:.75rem; margin-top:1.25rem;">
+    <a href="{{ url_for('lead_lists.view_lead_list', lead_list_id=lead_list.id) }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary" id="submit-btn">Save changes</button>
+  </div>
+</form>
+
+{# ── Filter-change confirmation dialog ── #}
+<dialog id="filter-change-dialog" style="border:none; border-radius:12px; padding:0; max-width:480px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,.2);">
+  <div style="padding:1.75rem 1.75rem 1.5rem;">
+    <h2 style="margin:0 0 .75rem; font-size:1.15rem;">Update lead filter?</h2>
+    <p style="margin:0 0 .6rem; font-size:.9rem; line-height:1.55; color:#374151;">
+      Changing the lead filter will reset Robin's snapshot of existing leads.
+    </p>
+    <p style="margin:0 0 1.5rem; font-size:.9rem; line-height:1.55; color:#374151;">
+      Robin will immediately fetch all leads currently matching your <strong>new</strong> filter
+      and mark them as already seen — they will <strong>not</strong> be acted on.
+      Only leads that appear in Close <em>after</em> you save will be eligible.
+    </p>
+    <div style="display:flex; justify-content:flex-end; gap:.6rem;">
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('filter-change-dialog').close()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="filter-change-confirm">Yes, update filter</button>
+    </div>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var _savedFilter = {{ lead_list.filters_json | tojson if lead_list.filters_json else 'null' }};
+</script>
+<script>
+(function () {
+  var form     = document.querySelector('form');
+  var textarea = document.getElementById('filters_json');
+  var dialog   = document.getElementById('filter-change-dialog');
+  var confirm  = document.getElementById('filter-change-confirm');
+
+  function normalise(str) {
+    try { return JSON.stringify(JSON.parse(str)); } catch (e) { return str.trim(); }
+  }
+
+  var originalValue = _savedFilter ? JSON.stringify(_savedFilter) : '';
+
+  form.addEventListener('submit', function (e) {
+    var currentValue = normalise(textarea.value);
+    if (currentValue !== originalValue) {
+      e.preventDefault();
+      e.stopPropagation();
+      dialog.showModal();
+    }
+  });
+
+  dialog.addEventListener('click', function (e) {
+    if (e.target === dialog) dialog.close();
+  });
+
+  confirm.addEventListener('click', function () {
+    window._disableBtn(confirm, 'Saving…');
+    dialog.close();
+    window._disableSubmits(form);
+    form.submit();
+  });
+})();
+</script>
+{% endblock %}

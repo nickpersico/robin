@@ -13,7 +13,7 @@ from flask_login import login_required, current_user
 
 from ..extensions import db
 from ..models.assignment_log import AssignmentLog
-from ..models.queue import Queue
+from ..models.lead_list import LeadList
 from ..models.rotation import Rotation
 
 activity_bp = Blueprint("activity", __name__)
@@ -24,12 +24,17 @@ activity_bp = Blueprint("activity", __name__)
 # ---------------------------------------------------------------------------
 
 def _base_query():
-    """AssignmentLog query scoped to the current user's org."""
+    """AssignmentLog query scoped to the current user's org.
+
+    Outer-joins Rotation because workflow-only Lead Lists have no rotation —
+    we don't want to drop those rows. Org scoping comes from LeadList.close_org_id
+    (backfilled from rotations.close_org_id for legacy rows).
+    """
     return (
         AssignmentLog.query
-        .join(Queue, AssignmentLog.queue_id == Queue.id)
-        .join(Rotation, Queue.rotation_id == Rotation.id)
-        .filter(Rotation.close_org_id == current_user.close_org_id)
+        .join(LeadList, AssignmentLog.queue_id == LeadList.id)
+        .outerjoin(Rotation, LeadList.rotation_id == Rotation.id)
+        .filter(LeadList.close_org_id == current_user.close_org_id)
     )
 
 
@@ -71,7 +76,7 @@ def _apply_filters(query):
 
     lead_list_ids = request.args.get("lead_list_ids", "").strip()
     if lead_list_ids:
-        query = query.filter(Queue.id.in_(lead_list_ids.split(",")))
+        query = query.filter(LeadList.id.in_(lead_list_ids.split(",")))
 
     user_ids = request.args.get("user_ids", "").strip()
     if user_ids:
@@ -106,10 +111,9 @@ def index():
     )
 
     lead_lists = (
-        Queue.query
-        .join(Rotation)
-        .filter(Rotation.close_org_id == org_id)
-        .order_by(Queue.name)
+        LeadList.query
+        .filter(LeadList.close_org_id == org_id)
+        .order_by(LeadList.name)
         .all()
     )
 
@@ -118,9 +122,9 @@ def index():
             AssignmentLog.close_user_id,
             AssignmentLog.close_user_name,
         )
-        .join(Queue, AssignmentLog.queue_id == Queue.id)
-        .join(Rotation, Queue.rotation_id == Rotation.id)
-        .filter(Rotation.close_org_id == org_id)
+        .join(LeadList, AssignmentLog.queue_id == LeadList.id)
+        .filter(LeadList.close_org_id == org_id)
+        .filter(AssignmentLog.close_user_id.isnot(None))
         .distinct()
         .order_by(AssignmentLog.close_user_name)
         .all()
@@ -169,11 +173,14 @@ def api():
             "assigned_at": log.assigned_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "close_lead_id": log.close_lead_id,
             "close_lead_name": log.close_lead_name or log.close_lead_id,
-            "close_user_name": log.close_user_name or log.close_user_id,
-            "queue_name": log.queue.name,
-            "queue_id": log.queue.id,
-            "rotation_name": log.queue.rotation.name,
-            "rotation_id": log.queue.rotation.id,
+            "close_user_name": (log.close_user_name or log.close_user_id) if log.close_user_id else None,
+            "queue_name": log.lead_list.name,
+            "queue_id": log.lead_list.id,
+            "rotation_name": log.lead_list.rotation.name if log.lead_list.rotation else None,
+            "rotation_id": log.lead_list.rotation.id if log.lead_list.rotation else None,
+            "workflow_name": log.workflow_name,
+            "workflow_id": log.workflow_id,
+            "workflow_subscription_id": log.workflow_subscription_id,
         })
 
     return jsonify({

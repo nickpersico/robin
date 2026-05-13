@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}New Lead List{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="text-muted" style="margin:0 0 .2rem; font-size:.85rem;">
+      <a href="{{ url_for('lead_lists.index') }}">Lead Lists</a>
+    </p>
+    <h1>New Lead List</h1>
+  </div>
+  <a href="{{ url_for('lead_lists.index') }}" class="btn btn-outline btn-sm">Cancel</a>
+</div>
+
+{% if error %}
+  <div class="alert alert-warning">Could not load Close options: {{ error }}</div>
+{% endif %}
+
+{% set defaults = {
+  "assign_enabled":     (request.form.get('assign_enabled') == '1') if request.method == 'POST' else false,
+  "rotation_id":        request.form.get('rotation_id', preselect_rotation_id or ''),
+  "custom_field_id":    request.form.get('custom_field_id', ''),
+  "overwrite_existing": (request.form.get('overwrite_existing') == '1') if request.method == 'POST' else false,
+  "workflow_enabled":   (request.form.get('workflow_enabled') == '1') if request.method == 'POST' else false,
+  "workflow_id":        request.form.get('workflow_id', ''),
+} %}
+
+<form method="post">
+  <div class="card">
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="name">Lead list name</label>
+      <input type="text" id="name" name="name" value="{{ request.form.get('name', '') }}" required
+             placeholder="e.g. Website Leads, Conference Leads">
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 .75rem;">Filter</h3>
+    <div style="display:flex; align-items:flex-start; gap:.6rem; background:#eff6ff;
+                border:1px solid #bfdbfe; border-radius:8px; padding:.75rem 1rem; margin-bottom:1.25rem;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           style="flex-shrink:0; margin-top:.1rem;">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <p style="margin:0; font-size:.875rem; color:#1e40af; line-height:1.5;">
+        Robin will watch for <strong>new leads</strong> created in Close that match this filter
+        and run the configured Actions on each one. Leads already in Close at creation time are skipped.
+      </p>
+    </div>
+
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="filters_json">Lead filter <span class="text-muted">(JSON from Close)</span></label>
+      {% include "lead_lists/_filter_help_modal.html" %}
+      <textarea id="filters_json" name="filters_json" rows="6" required
+                style="font-family: monospace; font-size: .85rem;"
+                placeholder='{"type":"and","queries":[]}'
+      >{{ request.form.get('filters_json', '') }}</textarea>
+      <p class="text-muted" style="font-size:.82rem; margin:.35rem 0 0;">
+        Paste the filter JSON from a Close Saved Search to define which leads qualify.
+      </p>
+    </div>
+  </div>
+
+  {% set enable_inline_group_create = true %}
+  {% include "lead_lists/_action_cards.html" %}
+
+  <div style="display:flex; justify-content:flex-end; gap:.75rem; margin-top:1.25rem;">
+    <a href="{{ url_for('lead_lists.index') }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Create lead list</button>
+  </div>
+</form>
+
+{# ── Inline "Create a group" modal ──────────────────────────────────────── #}
+<dialog id="new-group-dialog"
+        style="border:none; border-radius:12px; padding:0; max-width:560px; width:92%;
+               box-shadow:0 20px 60px rgba(0,0,0,.2);">
+  <form id="new-group-form" style="padding:1.5rem 1.5rem 1.25rem;">
+    <h2 style="margin:0 0 .25rem; font-size:1.15rem;">New Group</h2>
+    <p class="text-muted" style="margin:0 0 1rem; font-size:.85rem;">
+      Add a group of Close users to assign leads to. You can edit it later from the Groups page.
+    </p>
+
+    <div class="form-group">
+      <label for="new-group-name">Group name</label>
+      <input type="text" id="new-group-name" name="name" required
+             placeholder="e.g. SDRs, US Sales Team">
+    </div>
+
+    <div class="form-group">
+      <label for="new-group-description">Description <span class="text-muted">(optional)</span></label>
+      <input type="text" id="new-group-description" name="description">
+    </div>
+
+    {% with error=None, existing_ids=[] %}
+      {% include "rotations/_member_picker.html" %}
+    {% endwith %}
+
+    <div id="new-group-error" class="alert alert-error" style="display:none; margin-top:.75rem;"></div>
+
+    <div style="display:flex; justify-content:flex-end; gap:.6rem; margin-top:1.25rem;">
+      <button type="button" class="btn btn-outline" id="new-group-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="new-group-submit">Create group</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var openBtn = document.getElementById('open-new-group-modal');
+  if (!openBtn) return;  // org_users failed to load or button not rendered
+
+  var dialog   = document.getElementById('new-group-dialog');
+  var form     = document.getElementById('new-group-form');
+  var cancel   = document.getElementById('new-group-cancel');
+  var errorBox = document.getElementById('new-group-error');
+  var submit   = document.getElementById('new-group-submit');
+  var hint     = document.getElementById('no-groups-hint');
+  var select   = document.getElementById('rotation_id');
+
+  function openDialog() {
+    errorBox.style.display = 'none';
+    dialog.showModal();
+  }
+
+  openBtn.addEventListener('click', openDialog);
+
+  // The "Create one" inline link inside the no-groups hint also opens the modal.
+  var inlineLink = document.getElementById('no-groups-create-link');
+  if (inlineLink) {
+    inlineLink.addEventListener('click', function (e) {
+      e.preventDefault();
+      openDialog();
+    });
+  }
+
+  cancel.addEventListener('click', function () { dialog.close(); });
+  dialog.addEventListener('click', function (e) {
+    if (e.target === dialog) dialog.close();
+  });
+
+  form.addEventListener('submit', function (e) {
+    // Submitting a form inside a dialog wouldn't navigate, but we intercept anyway
+    // to avoid the outer form ever picking it up.
+    e.preventDefault();
+    e.stopPropagation();
+
+    errorBox.style.display = 'none';
+    submit.disabled = true;
+    var originalText = submit.textContent;
+    submit.textContent = 'Creating…';
+
+    var data = new FormData(form);
+
+    fetch("{{ url_for('rotations.api_create_rotation') }}", {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body: data,
+    })
+      .then(function (res) {
+        return res.json().then(function (body) { return { ok: res.ok, body: body }; });
+      })
+      .then(function (res) {
+        submit.disabled = false;
+        submit.textContent = originalText;
+        if (!res.ok || !res.body.ok) {
+          errorBox.textContent = (res.body && res.body.error) || 'Could not create group.';
+          errorBox.style.display = '';
+          return;
+        }
+
+        // Splice the new group into the dropdown and select it.
+        if (select) {
+          if (hint) hint.style.display = 'none';
+          select.style.display = '';
+          var opt = document.createElement('option');
+          opt.value = res.body.group.id;
+          opt.textContent = res.body.group.name;
+          opt.selected = true;
+          select.appendChild(opt);
+        }
+        dialog.close();
+        if (typeof window.__leadListRecheck === 'function') {
+          window.__leadListRecheck();
+        }
+      })
+      .catch(function (err) {
+        submit.disabled = false;
+        submit.textContent = originalText;
+        errorBox.textContent = err.message || 'Network error.';
+        errorBox.style.display = '';
+      });
+  });
+})();
+</script>
+{% endblock %}

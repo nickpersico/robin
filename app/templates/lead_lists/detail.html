@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ queue.name }}{% endblock %}
+{% block title %}{{ lead_list.name }}{% endblock %}
 
 {% block content %}
 
@@ -7,43 +7,39 @@
 <div class="page-header">
   <div>
     <p class="text-muted" style="margin:0 0 .2rem; font-size:.85rem;">
-      <a href="{{ url_for('rotations.view_rotation', rotation_id=rotation.id) }}">{{ rotation.name }}</a>
+      <a href="{{ url_for('lead_lists.index') }}">Lead Lists</a>
     </p>
     <div style="display:flex; align-items:center; gap:.75rem;">
-      <h1 style="margin:0;">{{ queue.name }}</h1>
-      {# Status badge #}
-      {% if queue.status == 'active' %}
+      <h1 style="margin:0;">{{ lead_list.name }}</h1>
+      {% if lead_list.status == 'active' %}
         <span class="badge badge-green">Active</span>
-      {% elif queue.status == 'paused' %}
+      {% elif lead_list.status == 'paused' %}
         <span class="badge badge-gray">Paused</span>
-      {% elif queue.status == 'pending' %}
+      {% elif lead_list.status == 'pending' %}
         <span class="badge badge-gray">Not started</span>
-      {% elif queue.status == 'running' %}
+      {% elif lead_list.status == 'running' %}
         <span class="badge badge-blue">Running</span>
-      {% elif queue.status == 'completed' %}
+      {% elif lead_list.status == 'completed' %}
         <span class="badge badge-gray">Completed</span>
-      {% elif queue.status == 'failed' %}
+      {% elif lead_list.status == 'failed' %}
         <span class="badge badge-red">Failed</span>
       {% endif %}
     </div>
   </div>
   {% if current_user.is_active_user %}
   <div style="display:flex; align-items:center; gap:.5rem;">
-    {# Pause — direct submit #}
-    {% if queue.status == 'active' %}
-      <form method="post" action="{{ url_for('queues.toggle_queue', rotation_id=rotation.id, queue_id=queue.id) }}" style="margin:0;">
+    {% if lead_list.status == 'active' %}
+      <form method="post" action="{{ url_for('lead_lists.toggle_lead_list', lead_list_id=lead_list.id) }}" style="margin:0;">
         <button type="submit" class="btn btn-outline btn-sm btn-header">Pause</button>
       </form>
     {% endif %}
-    {# Resume — opens confirmation dialog before submitting #}
-    {% if queue.status == 'paused' %}
-      <form id="resume-form" method="post" action="{{ url_for('queues.toggle_queue', rotation_id=rotation.id, queue_id=queue.id) }}" style="margin:0;"></form>
+    {% if lead_list.status == 'paused' %}
+      <form id="resume-form" method="post" action="{{ url_for('lead_lists.toggle_lead_list', lead_list_id=lead_list.id) }}" style="margin:0;"></form>
       <button type="button" class="btn btn-outline btn-sm btn-header" id="resume-btn">Resume</button>
     {% endif %}
-    <a href="{{ url_for('queues.edit_queue', rotation_id=rotation.id, queue_id=queue.id) }}" class="btn btn-outline btn-sm btn-header">Edit</a>
-    {# Delete — trash icon button #}
-    <form method="post" action="{{ url_for('queues.delete_queue', rotation_id=rotation.id, queue_id=queue.id) }}"
-          onsubmit="return confirm('Delete this lead list and all its assignment history? This cannot be undone.');" style="margin:0;">
+    <a href="{{ url_for('lead_lists.edit_lead_list', lead_list_id=lead_list.id) }}" class="btn btn-outline btn-sm btn-header">Edit</a>
+    <form method="post" action="{{ url_for('lead_lists.delete_lead_list', lead_list_id=lead_list.id) }}"
+          onsubmit="return confirm('Delete this lead list and all its history? This cannot be undone.');" style="margin:0;">
       <button type="submit" class="btn btn-outline btn-sm btn-header" title="Delete lead list"
               style="color:var(--danger); border-color:#e8b8b0;">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
@@ -58,53 +54,93 @@
 </div>
 
 {# ── Status banner ── #}
-{% set assigned_count = logs.total %}
-{% if queue.status == 'active' %}
+{% set event_count = logs.total %}
+{% if lead_list.status == 'active' %}
   <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:1.25rem 1.5rem; margin-bottom:1rem;">
     <p style="margin:0 0 .35rem; font-weight:600; color:#15803d;">Watching for new leads</p>
     <p class="text-muted" style="margin:0; font-size:.875rem;">
-      Robin is monitoring Close for new leads that match your filter conditions and assigning them as they arrive.
+      Robin is monitoring Close for new leads that match this filter and running the configured Actions.
       Checks run every 5 minutes.
-      <strong style="color:#111;">{{ assigned_count }}</strong> lead{{ 's' if assigned_count != 1 }} assigned so far.
+      <strong style="color:#111;">{{ event_count }}</strong> event{{ 's' if event_count != 1 }} so far.
     </p>
   </div>
-{% elif queue.status == 'paused' %}
+{% elif lead_list.status == 'paused' %}
   <div style="background:#fefce8; border:1px solid #fde68a; border-radius:8px; padding:1.25rem 1.5rem; margin-bottom:1rem;">
     <p style="margin:0 0 .35rem; font-weight:600; color:#92400e;">Paused</p>
     <p class="text-muted" style="margin:0; font-size:.875rem;">
-      This lead list is paused. New leads will not be assigned until you resume it.
-      <strong style="color:#111;">{{ assigned_count }}</strong> lead{{ 's' if assigned_count != 1 }} assigned so far.
+      This lead list is paused. No actions will run until you resume it.
+      <strong style="color:#111;">{{ event_count }}</strong> event{{ 's' if event_count != 1 }} so far.
     </p>
   </div>
 {% endif %}
 
-{# ── Queue details ── #}
+{# ── Actions summary ── #}
 <div class="card">
+  <h3 style="margin:0 0 .75rem;">Actions</h3>
   <table>
     <tbody>
       <tr>
-        <td style="color:#6b7280; font-size:.85rem;">Assigned to field</td>
-        <td>{{ queue.custom_field_label or queue.custom_field_id or '—' }}</td>
-      </tr>
-      <tr>
-        <td style="color:#6b7280; font-size:.85rem;">Overwrite existing</td>
+        <td style="color:#6b7280; font-size:.85rem; width:200px;">Assign a Lead</td>
         <td>
-          {% if queue.overwrite_existing %}
-            <span class="badge badge-blue">Yes</span>
+          {% if lead_list.assign_enabled %}
+            <span class="badge badge-green">Enabled</span>
+            &nbsp;
+            <span style="font-size:.9rem;">
+              Group:
+              {% if lead_list.rotation %}
+                <a href="{{ url_for('rotations.view_rotation', rotation_id=lead_list.rotation.id) }}">{{ lead_list.rotation.name }}</a>
+              {% else %}
+                —
+              {% endif %}
+              &nbsp;·&nbsp;
+              Field: {{ lead_list.custom_field_label or lead_list.custom_field_id or '—' }}
+              &nbsp;·&nbsp;
+              Overwrite:
+              {% if lead_list.overwrite_existing %}Yes{% else %}No{% endif %}
+            </span>
           {% else %}
-            <span class="badge badge-gray">No — skip if set</span>
+            <span class="badge badge-gray">Disabled</span>
           {% endif %}
         </td>
       </tr>
-      {% if queue.filters_json %}
       <tr>
-        <td style="color:#6b7280; font-size:.85rem; vertical-align:top; padding-top:.65rem;">Lead filter</td>
+        <td style="color:#6b7280; font-size:.85rem;">Trigger a Workflow</td>
+        <td>
+          {% if lead_list.workflow_enabled %}
+            <span class="badge badge-green">Enabled</span>
+            &nbsp;
+            <span style="font-size:.9rem;">
+              Workflow: {{ lead_list.workflow_name or lead_list.workflow_id or '—' }}
+              &nbsp;·&nbsp;
+              Run as:
+              {% if lead_list.workflow_run_as_user_id %}
+                {{ lead_list.workflow_run_as_user_name or lead_list.workflow_run_as_user_id }}
+              {% else %}
+                <em>assigned member</em>
+              {% endif %}
+            </span>
+          {% else %}
+            <span class="badge badge-gray">Disabled</span>
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+{# ── Filter + last-checked ── #}
+<div class="card">
+  <table>
+    <tbody>
+      {% if lead_list.filters_json %}
+      <tr>
+        <td style="color:#6b7280; font-size:.85rem; vertical-align:top; padding-top:.65rem; width:200px;">Lead filter</td>
         <td>
           <details>
             <summary style="cursor:pointer; font-size:.85rem; color:#6b7280; user-select:none;">View filter JSON</summary>
             <pre style="margin:.5rem 0 0; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px;
                         padding:.6rem .75rem; font-size:.8rem; overflow-x:auto; white-space:pre-wrap;
-                        word-break:break-all;">{{ queue.filters_json | tojson(indent=2) }}</pre>
+                        word-break:break-all;">{{ lead_list.filters_json | tojson(indent=2) }}</pre>
           </details>
         </td>
       </tr>
@@ -112,15 +148,15 @@
       <tr>
         <td style="color:#6b7280; font-size:.85rem;">Last checked</td>
         <td style="display:flex; align-items:center; gap:.75rem;">
-          {% if queue.last_checked_at %}
-            <span class="local-time" data-utc="{{ queue.last_checked_at.strftime('%Y-%m-%dT%H:%M:%S') }}Z"
+          {% if lead_list.last_checked_at %}
+            <span class="local-time" data-utc="{{ lead_list.last_checked_at.strftime('%Y-%m-%dT%H:%M:%S') }}Z"
                   style="font-size:.875rem; color:#374151;">—</span>
           {% else %}
             <span style="font-size:.875rem; color:#6b7280;">Not yet checked</span>
           {% endif %}
-          {% if current_user.is_active_user and queue.status == 'active' %}
+          {% if current_user.is_active_user and lead_list.status == 'active' %}
             <button type="button" class="btn btn-outline btn-sm"
-                    onclick="checkNow(this, '{{ url_for('queues.check_queue', rotation_id=rotation.id, queue_id=queue.id) }}')">
+                    onclick="checkNow(this, '{{ url_for('lead_lists.check_lead_list', lead_list_id=lead_list.id) }}')">
               Check now
             </button>
           {% endif %}
@@ -130,11 +166,11 @@
   </table>
 </div>
 
-{# ── Assignment log ── #}
+{# ── Event log ── #}
 <div class="card">
   <div class="card-header">
-    <h3>Leads Assigned</h3>
-    <span class="text-muted">{{ assigned_count }} total</span>
+    <h3>History</h3>
+    <span class="text-muted">{{ event_count }} total</span>
   </div>
 
   {% if logs.items %}
@@ -143,7 +179,7 @@
         <tr>
           <th>When</th>
           <th>Lead</th>
-          <th>Assigned to</th>
+          <th>Result</th>
         </tr>
       </thead>
       <tbody>
@@ -160,7 +196,27 @@
               {{ log.close_lead_name or log.close_lead_id }}
             </a>
           </td>
-          <td>{{ log.close_user_name or log.close_user_id }}</td>
+          <td>
+            {% if log.was_assigned %}
+              Assigned to <strong>{{ log.close_user_name or log.close_user_id }}</strong>
+            {% endif %}
+            {% if log.was_assigned and log.was_workflow_triggered %} &middot; {% endif %}
+            {% if log.was_workflow_triggered %}
+              Triggered workflow
+              {% if log.workflow_subscription_id %}
+                <a href="https://app.close.com/workflows/{{ log.workflow_id }}/runs/{{ log.workflow_subscription_id }}"
+                   target="_blank" rel="noopener"
+                   style="color:#2563eb; text-decoration:none;">
+                  <strong>{{ log.workflow_name or log.workflow_id }}</strong>
+                </a>
+              {% else %}
+                <strong>{{ log.workflow_name or log.workflow_id }}</strong>
+              {% endif %}
+            {% endif %}
+            {% if not log.was_assigned and not log.was_workflow_triggered %}
+              —
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -178,21 +234,22 @@
     </div>
     {% endif %}
   {% else %}
-    <p class="text-muted" style="margin:0;">No leads have been assigned through this queue yet.</p>
+    <p class="text-muted" style="margin:0;">No events for this lead list yet.</p>
   {% endif %}
 </div>
-{# ── Resume confirmation dialog (only rendered when paused) ── #}
-{% if queue.status == 'paused' %}
+
+{# ── Resume confirmation dialog ── #}
+{% if lead_list.status == 'paused' %}
 <dialog id="resume-dialog" style="border:none; border-radius:12px; padding:0; max-width:480px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,.2);">
   <div style="padding:1.75rem 1.75rem 1.5rem;">
     <h2 style="margin:0 0 .75rem; font-size:1.15rem;">Resume this lead list?</h2>
     <p style="margin:0 0 .6rem; font-size:.9rem; line-height:1.55; color:#374151;">
       When you resume, Robin will snapshot all leads currently matching your filter and mark
-      them as already seen — they will <strong>not</strong> be assigned.
+      them as already seen — they will <strong>not</strong> be acted on.
     </p>
     <p style="margin:0 0 1.5rem; font-size:.9rem; line-height:1.55; color:#374151;">
-      Only leads that appear in Close <em>after</em> you resume will be eligible for assignment.
-      Any leads that entered the filter while this list was paused will be skipped.
+      Only leads that appear in Close <em>after</em> you resume will be eligible. Any leads
+      that entered the filter while paused will be skipped.
     </p>
     <div style="display:flex; justify-content:flex-end; gap:.6rem;">
       <button type="button" class="btn btn-outline" id="resume-cancel">Cancel</button>
@@ -205,14 +262,13 @@
 {% endblock %}
 
 {% block scripts %}
-{% include "queues/_check_now_js.html" %}
+{% include "lead_lists/_check_now_js.html" %}
 <script>
 (function () {
   function formatLocalTime(isoStr) {
     var d = new Date(isoStr);
     var datePart = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     var timePart = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    // pull the timezone abbreviation (last token of the long time string)
     var tzPart  = d.toLocaleTimeString(undefined, { timeZoneName: 'short' }).split(' ').pop();
     return datePart + ' ' + timePart + ' ' + tzPart;
   }
@@ -222,7 +278,7 @@
 })();
 </script>
 
-{% if queue.status == 'paused' %}
+{% if lead_list.status == 'paused' %}
 <script>
 (function () {
   var btn     = document.getElementById('resume-btn');
@@ -237,10 +293,8 @@
     if (e.target === dialog) dialog.close();
   });
   confirm.addEventListener('click', function () {
-    // Keep the dialog open so the user sees "Resuming…" while the server
-    // seeds existing leads — the page will navigate away once done.
     cancel.disabled = true;
-    window._disableBtn(confirm, 'Resuming\u2026');
+    window._disableBtn(confirm, 'Resuming…');
     form.submit();
   });
 })();
