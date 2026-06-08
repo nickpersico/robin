@@ -162,21 +162,53 @@ def edit_rotation(rotation_id: int):
             rotation.name = name
             rotation.description = description or None
 
-            for m in rotation.members:
-                db.session.delete(m)
-            db.session.flush()
-
+            # Diff the submitted member list against the current roster instead
+            # of delete-and-recreate. Bulk-deleting RotationMember rows blows up
+            # with a foreign-key violation if any of them are referenced by an
+            # AssignmentLog (which has rotation_member_id without ON DELETE
+            # SET NULL). For removed members we null out that FK first so the
+            # Activity Log still reads close_user_name from its denormalised
+            # columns and history isn't lost.
+            existing_by_close_id = {m.close_user_id: m for m in rotation.members}
+            submitted_set = set(member_ids)
             user_lookup = {u["id"]: u for u in org_users}
+
+            # 1. Remove members no longer in the submitted list.
+            removed_member_pks = [
+                m.id for cuid, m in existing_by_close_id.items()
+                if cuid not in submitted_set
+            ]
+            if removed_member_pks:
+                AssignmentLog.query.filter(
+                    AssignmentLog.rotation_member_id.in_(removed_member_pks)
+                ).update(
+                    {"rotation_member_id": None},
+                    synchronize_session=False,
+                )
+                for cuid, member in list(existing_by_close_id.items()):
+                    if cuid not in submitted_set:
+                        db.session.delete(member)
+                        del existing_by_close_id[cuid]
+                db.session.flush()
+
+            # 2. Update kept members and insert new ones, preserving submitted order.
             for position, close_user_id in enumerate(member_ids):
                 user_info = user_lookup.get(close_user_id, {})
-                member = RotationMember(
-                    rotation_id=rotation.id,
-                    close_user_id=close_user_id,
-                    close_user_email=user_info.get("email", ""),
-                    close_user_name=_display_name(user_info),
-                    position=position,
-                )
-                db.session.add(member)
+                if close_user_id in existing_by_close_id:
+                    member = existing_by_close_id[close_user_id]
+                    member.position = position
+                    # Refresh denormalised name/email in case it changed in Close.
+                    if user_info:
+                        member.close_user_email = user_info.get("email", "") or member.close_user_email
+                        member.close_user_name = _display_name(user_info) or member.close_user_name
+                else:
+                    db.session.add(RotationMember(
+                        rotation_id=rotation.id,
+                        close_user_id=close_user_id,
+                        close_user_email=user_info.get("email", ""),
+                        close_user_name=_display_name(user_info),
+                        position=position,
+                    ))
 
             if rotation.current_index >= len(member_ids):
                 rotation.current_index = 0
