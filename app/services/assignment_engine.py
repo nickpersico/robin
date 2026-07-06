@@ -73,6 +73,25 @@ def _get_org_user(close_org_id: str) -> Optional[User]:
     )
 
 
+def _sync_rotation_member_active_flags(rotation, active_close_user_ids: set) -> int:
+    """
+    Mirror RotationMember.is_active to Close's Team Management state so a
+    member who was deactivated in Close is never assigned a lead. A member
+    whose close_user_id is in `active_close_user_ids` is set active; anyone
+    missing (deactivated or removed from the org entirely) is set inactive.
+
+    Returns the number of members whose flag actually flipped, so callers
+    can decide whether to log.
+    """
+    changed = 0
+    for member in rotation.members:
+        desired = member.close_user_id in active_close_user_ids
+        if member.is_active != desired:
+            member.is_active = desired
+            changed += 1
+    return changed
+
+
 def _list_org_id(lead_list: LeadList) -> Optional[str]:
     """Resolve the org for a Lead List — prefer the denormalised column."""
     if lead_list.close_org_id:
@@ -242,6 +261,28 @@ def poll_queue(lead_list_id: str) -> dict:
 
     client = CloseClient(org_user)
     now = datetime.utcnow()
+
+    # Sync rotation member is_active against Close's Team Management before we
+    # decide who's next in the round-robin. Anyone deactivated in Close (left
+    # the company, suspended, etc.) gets flipped to inactive and skipped by
+    # next_member(). Anyone reactivated gets flipped back automatically on
+    # the next tick. Only relevant when the Assign action is enabled —
+    # workflow-only lists don't consult the rotation.
+    if lead_list.assign_enabled and lead_list.rotation is not None:
+        try:
+            active_ids = {m["id"] for m in client.get_active_org_members()}
+            changed = _sync_rotation_member_active_flags(lead_list.rotation, active_ids)
+            if changed:
+                logger.info(
+                    "LeadList %s: synced is_active on %d rotation member(s) from Close",
+                    lead_list_id, changed,
+                )
+        except CloseAPIError as e:
+            # Non-fatal — proceed with the last-known is_active state.
+            logger.warning(
+                "LeadList %s: could not sync member status from Close: %s",
+                lead_list_id, e,
+            )
 
     after_dt = lead_list.last_checked_at or lead_list.created_at
     search_query = _inject_date_filter(_normalize_filter(lead_list.filters_json), after_dt)

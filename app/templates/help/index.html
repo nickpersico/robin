@@ -160,7 +160,7 @@
     <a href="#edge-filter-change" class="sub">Changing filters</a>
     <a href="#edge-run-as-no-email" class="sub">Workflow has no email account</a>
     <a href="#edge-new-users" class="sub">New users joining</a>
-    <a href="#edge-inactive-members" class="sub">Inactive members</a>
+    <a href="#edge-inactive-members" class="sub">Deactivating a member</a>
     <a href="#support">Support</a>
   </nav>
 
@@ -305,8 +305,12 @@
       <li><span class="help-badge gray">Inactive</span> — skipped entirely; does not advance the round-robin pointer.</li>
     </ul>
     <p>
-      Only active members count toward the rotation order. Toggle a member's status at
-      any time from the Group edit page.
+      Only active members count toward the rotation order. Robin mirrors this status
+      from Close's Team Management on every poll (every ~5 minutes): if a user is
+      deactivated in Close, Robin flips them to <span class="help-badge gray">Inactive</span>
+      and stops assigning them leads. If they're reactivated in Close, Robin flips
+      them back to <span class="help-badge green">Active</span> automatically. Close
+      is the source of truth — there's no separate toggle in Robin.
     </p>
 
     <h3>Next up</h3>
@@ -492,16 +496,23 @@
       rotation order.
     </div>
 
-    <h3 id="edge-inactive-members">Setting a member to inactive</h3>
+    <h3 id="edge-inactive-members">Deactivating a member</h3>
     <p>
-      Marking a Group member as <span class="help-badge gray">Inactive</span> removes them
-      from the rotation immediately. The next assignment will go to the next active member
-      in order — the round-robin pointer is not reset.
+      Deactivate a user in Close's <strong>Team Management</strong> and Robin will skip
+      them on the next poll (within ~5 minutes). Their Group membership flips to
+      <span class="help-badge gray">Inactive</span>, the next lead goes to the next
+      active member in order, and the round-robin pointer is not reset.
     </p>
     <p>
-      When you reactivate a member, they re-enter the rotation at their original position.
-      They will receive the next lead when the pointer cycles back to their position.
-      No leads are retroactively redistributed.
+      Reactivate the user in Close and Robin flips them back to
+      <span class="help-badge green">Active</span> just as quickly. They re-enter the
+      rotation at their original position and receive the next lead when the pointer
+      cycles back to them. No leads are retroactively redistributed either way.
+    </p>
+    <p>
+      Because sync is driven by Close, Robin has no separate "away" toggle for
+      temporary absences like vacation or sick days. For short-term absences,
+      remove the user from the Group and add them back afterward.
     </p>
 
     {# ── Support ── #}
