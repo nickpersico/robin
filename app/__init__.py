@@ -145,6 +145,107 @@ def create_app(config_class=Config):
         db.session.commit()
         click.echo(f"✓ {user.full_name} ({email}) is now an admin.")
 
+    @app.cli.command("check-backlog")
+    @click.option("--org", help="Only inspect Lead Lists in this Close org id.")
+    def check_backlog(org):
+        """
+        Report how many leads each active Lead List would act on if polled
+        right now — without touching anything.
+
+        Runs the same Close search poll_queue would run, then reports:
+          - matches:     unseeded leads created since last_checked_at
+          - would_skip:  matches whose target custom field is already set
+                         (only counted when overwrite_existing is False,
+                          since those get skipped by the engine)
+          - actionable:  matches - would_skip
+
+        Use this after an outage to decide which lists actually need
+        reseeding — a list with actionable=0 is safe to leave alone.
+        """
+        from .models.lead_list import LeadList, STATUS_ACTIVE
+        from .services.close_api import CloseClient, CloseAPIError
+        from .services.assignment_engine import (
+            _normalize_filter,
+            _inject_date_filter,
+            _get_org_user,
+        )
+
+        q = LeadList.query.filter_by(status=STATUS_ACTIVE)
+        if org:
+            q = q.filter(LeadList.close_org_id == org)
+        lists = q.order_by(LeadList.close_org_id, LeadList.name).all()
+
+        if not lists:
+            click.echo("No active Lead Lists found.")
+            return
+
+        click.echo(f"Checking {len(lists)} active Lead List(s)...\n")
+
+        total_actionable = 0
+        lists_with_backlog = 0
+
+        for ll in lists:
+            try:
+                org_user = _get_org_user(ll.close_org_id)
+                if not org_user:
+                    click.echo(f"! {ll.id} {ll.name!r} — no active user for org, skipped")
+                    continue
+
+                client = CloseClient(org_user)
+                after_dt = ll.last_checked_at or ll.created_at
+                search_query = _inject_date_filter(
+                    _normalize_filter(ll.filters_json), after_dt
+                )
+                leads = client.search_leads(search_query)
+
+                seeded = set(ll.seeded_lead_ids or [])
+                unseeded = [l for l in leads if l.get("id") not in seeded]
+
+                would_skip = 0
+                if (
+                    ll.assign_enabled
+                    and ll.custom_field_id
+                    and not ll.overwrite_existing
+                ):
+                    would_skip = sum(
+                        1 for l in unseeded
+                        if (l.get("custom") or {}).get(ll.custom_field_id)
+                    )
+
+                matches = len(unseeded)
+                actionable = matches - would_skip
+
+                actions = []
+                if ll.assign_enabled:
+                    actions.append("assign")
+                if ll.workflow_enabled:
+                    actions.append("workflow")
+                action_str = "+".join(actions) or "none"
+
+                marker = "✓" if actionable == 0 else "!"
+                click.echo(
+                    f"{marker} {ll.id}  org={ll.close_org_id[:20]}  {ll.name!r}"
+                )
+                click.echo(
+                    f"    since {after_dt.isoformat(timespec='seconds')}  "
+                    f"actions={action_str}  matches={matches}  "
+                    f"would_skip={would_skip}  actionable={actionable}"
+                )
+
+                if actionable > 0:
+                    lists_with_backlog += 1
+                    total_actionable += actionable
+
+            except CloseAPIError as e:
+                click.echo(f"! {ll.id} {ll.name!r} — Close API error: {e}", err=True)
+            except Exception as e:
+                click.echo(f"! {ll.id} {ll.name!r} — error: {e}", err=True)
+
+        click.echo(
+            f"\nSummary: {lists_with_backlog} list(s) have a backlog, "
+            f"{total_actionable} lead(s) total would be acted on."
+        )
+
     @app.cli.command("reseed-all-active")
     @click.option("--dry-run", is_flag=True, help="List what would be re-seeded without changing anything.")
     def reseed_all_active(dry_run):
