@@ -145,4 +145,71 @@ def create_app(config_class=Config):
         db.session.commit()
         click.echo(f"✓ {user.full_name} ({email}) is now an admin.")
 
+    @app.cli.command("reseed-all-active")
+    @click.option("--dry-run", is_flag=True, help="List what would be re-seeded without changing anything.")
+    def reseed_all_active(dry_run):
+        """
+        Safely resume polling after an outage: for every active Lead List,
+        re-seed its "already seen" set to the current state in Close.
+
+        Meant for use after Robin was unavailable long enough that customers
+        may have handled the intervening leads manually. Without this, the
+        next poll would process the whole backlog — potentially overwriting
+        manual assignments or firing workflows on already-handled leads.
+
+        Per list: pause -> re-seed -> resume, one at a time. A single list's
+        failure does not stop the others. Run with --dry-run first to see
+        what will be touched.
+        """
+        from .models.lead_list import LeadList, STATUS_ACTIVE, STATUS_PAUSED
+        from .services.assignment_engine import seed_queue
+
+        active = (
+            LeadList.query
+            .filter_by(status=STATUS_ACTIVE)
+            .order_by(LeadList.close_org_id, LeadList.name)
+            .all()
+        )
+
+        if not active:
+            click.echo("No active Lead Lists found. Nothing to do.")
+            return
+
+        click.echo(f"Found {len(active)} active Lead List(s).")
+        if dry_run:
+            for ll in active:
+                click.echo(f"  [dry-run] would re-seed  {ll.id}  org={ll.close_org_id}  {ll.name!r}")
+            click.echo("\nDry run complete. Re-run without --dry-run to apply.")
+            return
+
+        succeeded = 0
+        failed = 0
+        for ll in active:
+            click.echo(f"→ {ll.id}  org={ll.close_org_id}  {ll.name!r}")
+            try:
+                # 1. Pause so the scheduler cannot poll this list mid-reseed.
+                ll.status = STATUS_PAUSED
+                db.session.commit()
+
+                # 2. Re-seed: fetch every currently-matching lead and mark it seen.
+                seed_queue(ll.id)
+
+                # 3. Refresh from DB (seed_queue may have committed) and resume.
+                db.session.refresh(ll)
+                ll.status = STATUS_ACTIVE
+                db.session.commit()
+                click.echo(f"    ✓ re-seeded ({len(ll.seeded_lead_ids or [])} lead(s) snapshotted)")
+                succeeded += 1
+            except Exception as exc:
+                # Keep going — one bad list should not block the rest. Leave it
+                # paused so a broken list does not silently start assigning.
+                db.session.rollback()
+                click.echo(f"    ✗ FAILED: {exc}", err=True)
+                click.echo(f"      (Lead List left paused — investigate and resume manually.)", err=True)
+                failed += 1
+
+        click.echo(f"\nDone. {succeeded} re-seeded, {failed} failed.")
+        if failed:
+            raise SystemExit(1)
+
     return app
