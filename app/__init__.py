@@ -146,21 +146,21 @@ def create_app(config_class=Config):
         click.echo(f"✓ {user.full_name} ({email}) is now an admin.")
 
     @app.cli.command("inspect-org")
-    @click.option("--email", help="Look up the org by any user's email.")
-    @click.option("--org-id", help="Look up the org by Close org id (orga_...).")
+    @click.option("--email", help="Look up every org containing a user with this email.")
+    @click.option("--org-id", help="Look up a single org by Close org id (orga_...).")
     def inspect_org(email, org_id):
         """
         Dump a Close org's Robin configuration for support triage.
 
-        Given an email OR a close_org_id, prints:
-          - the matched user + role/status
-          - every Group in the org with members (position, active flag,
-            name, email)
-          - every Lead List in the org with its status, actions, target
-            field, rotation link, and overwrite setting
+        --email finds every Robin User row with that address (a person can
+        be in multiple Close orgs, one User row per org) and dumps each
+        org's config in turn. --org-id looks up one org directly.
 
-        Meant for answering "what is customer X actually configured to do?"
-        without SSHing in and writing an ad-hoc script each time.
+        Prints per org:
+          - the matched user (with --email) + role/status
+          - every Group with its members (position, active flag, name, email)
+          - every Lead List with status, actions, target field, rotation
+            link, overwrite, and workflow run-as
         """
         from sqlalchemy import func as _func
         from .models.user import User
@@ -171,71 +171,84 @@ def create_app(config_class=Config):
             click.echo("Provide either --email or --org-id.", err=True)
             raise SystemExit(2)
 
-        resolved_org_id = org_id
+        def _dump_org(org, user=None):
+            if user is not None:
+                full_name = (
+                    f"{user.first_name or ''} {user.last_name or ''}".strip()
+                    or "(no name)"
+                )
+                click.echo(
+                    f"User:  {user.email}  ({full_name})  "
+                    f"role={user.role}  status={user.status}"
+                )
+            click.echo(f"Org:   {org}")
+
+            rotations = (
+                Rotation.query
+                .filter_by(close_org_id=org)
+                .order_by(Rotation.created_at)
+                .all()
+            )
+            click.echo(f"\nGroups: {len(rotations)}")
+            for r in rotations:
+                click.echo(
+                    f"  {r.id}  {r.name!r}  current_index={r.current_index}  "
+                    f"members={len(r.members)}"
+                )
+                for m in sorted(r.members, key=lambda x: x.position):
+                    click.echo(
+                        f"    [{m.position}] active={m.is_active}  {m.close_user_id}  "
+                        f"{m.close_user_name!r}  <{m.close_user_email}>"
+                    )
+
+            lead_lists = (
+                LeadList.query
+                .filter_by(close_org_id=org)
+                .order_by(LeadList.created_at)
+                .all()
+            )
+            click.echo(f"\nLead Lists: {len(lead_lists)}")
+            for ll in lead_lists:
+                actions = []
+                if ll.assign_enabled:
+                    actions.append("assign")
+                if ll.workflow_enabled:
+                    actions.append("workflow")
+                click.echo(
+                    f"  {ll.id}  {ll.name!r}  status={ll.status}  "
+                    f"actions={'+'.join(actions) or 'none'}"
+                )
+                if ll.assign_enabled:
+                    click.echo(
+                        f"    rotation={ll.rotation_id}  field={ll.custom_field_label!r}  "
+                        f"overwrite={ll.overwrite_existing}"
+                    )
+                if ll.workflow_enabled:
+                    click.echo(
+                        f"    workflow={ll.workflow_name!r} ({ll.workflow_id})  "
+                        f"run_as={ll.workflow_run_as_user_name or 'assigned member'}"
+                    )
+
         if email:
-            user = (
+            users = (
                 User.query
                 .filter(_func.lower(User.email) == email.lower())
                 .order_by(User.created_at)
-                .first()
+                .all()
             )
-            if user is None:
+            if not users:
                 click.echo(f"No user found with email: {email}", err=True)
                 raise SystemExit(1)
-            resolved_org_id = user.close_org_id
-            full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "(no name)"
             click.echo(
-                f"User:  {user.email}  ({full_name})  "
-                f"role={user.role}  status={user.status}"
+                f"Found {len(users)} Robin user record(s) for {email}"
+                f" across {len({u.close_org_id for u in users})} org(s).\n"
             )
-
-        click.echo(f"Org:   {resolved_org_id}")
-
-        rotations = (
-            Rotation.query
-            .filter_by(close_org_id=resolved_org_id)
-            .order_by(Rotation.created_at)
-            .all()
-        )
-        click.echo(f"\nGroups: {len(rotations)}")
-        for r in rotations:
-            click.echo(
-                f"  {r.id}  {r.name!r}  current_index={r.current_index}  "
-                f"members={len(r.members)}"
-            )
-            for m in sorted(r.members, key=lambda x: x.position):
-                click.echo(
-                    f"    [{m.position}] active={m.is_active}  {m.close_user_id}  "
-                    f"{m.close_user_name!r}  <{m.close_user_email}>"
-                )
-
-        lead_lists = (
-            LeadList.query
-            .filter_by(close_org_id=resolved_org_id)
-            .order_by(LeadList.created_at)
-            .all()
-        )
-        click.echo(f"\nLead Lists: {len(lead_lists)}")
-        for ll in lead_lists:
-            actions = []
-            if ll.assign_enabled:
-                actions.append("assign")
-            if ll.workflow_enabled:
-                actions.append("workflow")
-            click.echo(
-                f"  {ll.id}  {ll.name!r}  status={ll.status}  "
-                f"actions={'+'.join(actions) or 'none'}"
-            )
-            if ll.assign_enabled:
-                click.echo(
-                    f"    rotation={ll.rotation_id}  field={ll.custom_field_label!r}  "
-                    f"overwrite={ll.overwrite_existing}"
-                )
-            if ll.workflow_enabled:
-                click.echo(
-                    f"    workflow={ll.workflow_name!r} ({ll.workflow_id})  "
-                    f"run_as={ll.workflow_run_as_user_name or 'assigned member'}"
-                )
+            for i, user in enumerate(users):
+                if i > 0:
+                    click.echo("\n" + "=" * 60 + "\n")
+                _dump_org(user.close_org_id, user=user)
+        else:
+            _dump_org(org_id)
 
     @app.cli.command("check-backlog")
     @click.option("--org", help="Only inspect Lead Lists in this Close org id.")
