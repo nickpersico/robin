@@ -17,6 +17,19 @@ class CloseAPIError(Exception):
         self.status_code = status_code
 
 
+def _format_http_error(action: str, resp) -> str:
+    """
+    Build a diagnostic error string that always names the HTTP status code
+    and flags an empty response body — so operators aren't left with a
+    useless "action failed:" tail when Close returns e.g. a 502/504 with
+    no body.
+    """
+    body = (resp.text or "").strip()
+    if not body:
+        body = "(empty response body)"
+    return f"{action} failed: HTTP {resp.status_code} — {body}"
+
+
 def exchange_code_for_tokens(code: str) -> dict:
     """Exchange an authorization code for access + refresh tokens."""
     resp = requests.post(
@@ -31,7 +44,7 @@ def exchange_code_for_tokens(code: str) -> dict:
     )
     if not resp.ok:
         raise CloseAPIError(
-            f"Token exchange failed: {resp.text}", status_code=resp.status_code
+            _format_http_error("Token exchange", resp), status_code=resp.status_code
         )
     return resp.json()
 
@@ -49,7 +62,7 @@ def refresh_access_token(refresh_token: str) -> dict:
     )
     if not resp.ok:
         raise CloseAPIError(
-            f"Token refresh failed: {resp.text}", status_code=resp.status_code
+            _format_http_error("Token refresh", resp), status_code=resp.status_code
         )
     return resp.json()
 
@@ -109,7 +122,7 @@ class CloseClient:
         )
         if not resp.ok:
             raise CloseAPIError(
-                f"POST {path} failed: {resp.text}", status_code=resp.status_code
+                _format_http_error(f"POST {path}", resp), status_code=resp.status_code
             )
         return resp.json()
 
@@ -122,7 +135,7 @@ class CloseClient:
         )
         if not resp.ok:
             raise CloseAPIError(
-                f"PUT {path} failed: {resp.text}", status_code=resp.status_code
+                _format_http_error(f"PUT {path}", resp), status_code=resp.status_code
             )
         return resp.json()
 
@@ -135,7 +148,7 @@ class CloseClient:
         )
         if not resp.ok:
             raise CloseAPIError(
-                f"GET {path} failed: {resp.text}", status_code=resp.status_code
+                _format_http_error(f"GET {path}", resp), status_code=resp.status_code
             )
         return resp.json()
 
