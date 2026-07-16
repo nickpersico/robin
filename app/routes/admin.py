@@ -1,3 +1,5 @@
+import json
+import logging
 from functools import wraps
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
@@ -5,6 +7,8 @@ from flask_login import login_required, current_user
 
 from ..extensions import db
 from ..models.user import User, ROLE_ADMIN, ROLE_MEMBER, STATUS_ACTIVE, STATUS_PENDING, STATUS_SUSPENDED
+
+logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -113,6 +117,97 @@ def superadmin_lead_list(lead_list_id):
         seeded_count=len(seeded_ids),
         seeded_preview=seeded_ids[:10],
     )
+
+
+@admin_bp.route("/system/lead-lists/<lead_list_id>/toggle", methods=["POST"])
+@login_required
+@superadmin_required
+def superadmin_toggle_lead_list(lead_list_id):
+    """
+    Flip a customer's Lead List between active and paused as a support
+    action. Matches the customer-facing toggle: resuming triggers a
+    seed_queue so we don't retroactively assign leads accumulated during
+    the paused window.
+    """
+    from ..models.lead_list import LeadList, STATUS_ACTIVE, STATUS_PAUSED
+    from ..services.assignment_engine import seed_queue
+
+    lead_list = db.session.get(LeadList, lead_list_id)
+    if lead_list is None:
+        abort(404)
+
+    if lead_list.status == STATUS_PAUSED:
+        lead_list.status = STATUS_ACTIVE
+        resuming = True
+    elif lead_list.status == STATUS_ACTIVE:
+        lead_list.status = STATUS_PAUSED
+        resuming = False
+    else:
+        flash(f"Lead list is in status {lead_list.status!r} — cannot toggle from /system.", "error")
+        return redirect(url_for("admin.superadmin_lead_list", lead_list_id=lead_list_id))
+
+    db.session.commit()
+
+    logger.warning(
+        "SUPER-ADMIN %s toggled lead list %s (%s) → status=%s",
+        current_user.email, lead_list.id, lead_list.close_org_id, lead_list.status,
+    )
+
+    if resuming:
+        seed_queue(lead_list.id)
+        flash("Resumed and re-seeded — Robin will start polling this list on the next tick.", "success")
+    else:
+        flash("Paused. Robin will stop polling this list.", "success")
+
+    return redirect(url_for("admin.superadmin_lead_list", lead_list_id=lead_list_id))
+
+
+@admin_bp.route("/system/lead-lists/<lead_list_id>/update-filter", methods=["POST"])
+@login_required
+@superadmin_required
+def superadmin_update_lead_list_filter(lead_list_id):
+    """
+    Replace a Lead List's filter JSON as a support action. Mirrors the
+    customer-facing edit path: JSON is validated, and a successful change
+    triggers a re-seed so we don't sweep in a backlog of leads that
+    happened to match the new filter's history.
+    """
+    from ..models.lead_list import LeadList
+    from ..services.assignment_engine import seed_queue
+
+    lead_list = db.session.get(LeadList, lead_list_id)
+    if lead_list is None:
+        abort(404)
+
+    raw = (request.form.get("filters_json") or "").strip()
+    if not raw:
+        flash("Filter JSON cannot be empty.", "error")
+        return redirect(url_for("admin.superadmin_lead_list", lead_list_id=lead_list_id))
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        flash(f"Invalid JSON: {exc}", "error")
+        return redirect(url_for("admin.superadmin_lead_list", lead_list_id=lead_list_id))
+
+    changed = json.dumps(parsed, sort_keys=True) != json.dumps(lead_list.filters_json, sort_keys=True)
+    if not changed:
+        flash("Filter is unchanged — nothing to save.", "info")
+        return redirect(url_for("admin.superadmin_lead_list", lead_list_id=lead_list_id))
+
+    lead_list.filters_json = parsed
+    db.session.commit()
+
+    logger.warning(
+        "SUPER-ADMIN %s replaced filter_json on lead list %s (%s)",
+        current_user.email, lead_list.id, lead_list.close_org_id,
+    )
+
+    # Re-seed so the new filter doesn't retroactively fire on old matches.
+    seed_queue(lead_list.id)
+    flash("Filter updated and list re-seeded from current Close state.", "success")
+
+    return redirect(url_for("admin.superadmin_lead_list", lead_list_id=lead_list_id))
 
 
 @admin_bp.route("/admin/users")
