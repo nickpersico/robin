@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}Lead List · {{ lead_list.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:1rem;">
+  <a href="{{ url_for('admin.superadmin_dashboard') }}#lead-lists" class="text-muted" style="font-size:.85rem;">← Back to /system</a>
+</div>
+
+<div class="page-header">
+  <h1 style="margin:0;">
+    {{ lead_list.name }}
+    {% if lead_list.status == 'active' %}
+      <span class="badge badge-green" style="font-size:.7rem; vertical-align:middle;">Active</span>
+    {% elif lead_list.status == 'paused' %}
+      <span class="badge badge-gray" style="font-size:.7rem; vertical-align:middle;">Paused</span>
+    {% else %}
+      <span class="badge badge-gray" style="font-size:.7rem; vertical-align:middle;">{{ lead_list.status | capitalize }}</span>
+    {% endif %}
+  </h1>
+</div>
+
+<p class="text-muted" style="font-size:.85rem; margin-top:-.5rem;">
+  <code>{{ lead_list.id }}</code>
+  {% if org %} · Organization: <strong>{{ org.name }}</strong>{% endif %}
+  {% if lead_list.close_org_id %} · <code>{{ lead_list.close_org_id }}</code>{% endif %}
+</p>
+
+{# ── Timestamps + polling state ── #}
+<div class="card" style="margin-bottom:1rem;">
+  <h3 style="margin:0 0 .5rem;">Polling state</h3>
+  <table style="font-size:.9rem;">
+    <tbody>
+      <tr>
+        <td class="text-muted" style="width:220px;">Created</td>
+        <td>{{ lead_list.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+      </tr>
+      <tr>
+        <td class="text-muted">Last updated</td>
+        <td>{{ lead_list.updated_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+      </tr>
+      <tr>
+        <td class="text-muted">Last checked by scheduler</td>
+        <td>
+          {% if lead_list.last_checked_at %}
+            {{ lead_list.last_checked_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+          {% else %}
+            <em class="text-muted">Never</em>
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td class="text-muted">Seeded lead IDs snapshot</td>
+        <td>
+          {{ seeded_count }} lead{{ 's' if seeded_count != 1 }}
+          {% if seeded_preview %}
+            <details style="margin-top:.3rem;">
+              <summary class="text-muted" style="font-size:.8rem; cursor:pointer;">first {{ seeded_preview | length }}</summary>
+              <div style="font-family:monospace; font-size:.78rem; margin-top:.3rem; color:var(--text-muted);">
+                {% for lid in seeded_preview %}{{ lid }}<br>{% endfor %}
+              </div>
+            </details>
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="text-muted" style="font-size:.78rem; margin:.5rem 0 0;">
+    On resume or filter change, Robin snapshots every currently-matching lead into
+    "seeded" so they aren't retroactively processed. Only leads created after that
+    moment (and after <em>Last checked</em>) will be acted on.
+  </p>
+</div>
+
+{# ── Configuration ── #}
+<div class="card" style="margin-bottom:1rem;">
+  <h3 style="margin:0 0 .5rem;">Actions</h3>
+  <table style="font-size:.9rem;">
+    <tbody>
+      <tr>
+        <td class="text-muted" style="width:220px;">Assign a Lead</td>
+        <td>
+          {% if lead_list.assign_enabled %}
+            <span class="badge badge-green">Enabled</span>
+            &nbsp; Group: <code>{{ lead_list.rotation_id or '—' }}</code>
+            {% if lead_list.rotation %}({{ lead_list.rotation.name }}){% endif %}
+            · Field: <strong>{{ lead_list.custom_field_label or lead_list.custom_field_id or '—' }}</strong>
+            · Overwrite: <strong>{{ 'Yes' if lead_list.overwrite_existing else 'No' }}</strong>
+          {% else %}
+            <span class="badge badge-gray">Disabled</span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td class="text-muted">Trigger a Workflow</td>
+        <td>
+          {% if lead_list.workflow_enabled %}
+            <span class="badge badge-green">Enabled</span>
+            &nbsp; Workflow: <strong>{{ lead_list.workflow_name or lead_list.workflow_id or '—' }}</strong>
+            · Run as:
+            {% if lead_list.workflow_run_as_user_id %}
+              {{ lead_list.workflow_run_as_user_name or lead_list.workflow_run_as_user_id }}
+            {% else %}
+              <em>assigned member</em>
+            {% endif %}
+          {% else %}
+            <span class="badge badge-gray">Disabled</span>
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+{# ── Rotation ── #}
+{% if lead_list.rotation %}
+<div class="card" style="margin-bottom:1rem;">
+  <h3 style="margin:0 0 .5rem;">Group members</h3>
+  <p class="text-muted" style="font-size:.85rem; margin:0 0 .5rem;">
+    Current index: <strong>{{ lead_list.rotation.current_index }}</strong>
+    (next active member gets the next assignment)
+  </p>
+  {% if lead_list.rotation.members %}
+    <table style="font-size:.9rem;">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th style="width:80px;">Status</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Close User ID</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in lead_list.rotation.members | sort(attribute='position') %}
+        <tr {% if not m.is_active %}style="opacity:.55;"{% endif %}>
+          <td>{{ m.position }}</td>
+          <td>
+            {% if m.is_active %}
+              <span class="badge badge-green">Active</span>
+            {% else %}
+              <span class="badge badge-gray">Inactive</span>
+            {% endif %}
+          </td>
+          <td>{{ m.close_user_name or '—' }}</td>
+          <td class="text-muted" style="font-size:.85rem;">{{ m.close_user_email or '—' }}</td>
+          <td class="text-muted" style="font-family:monospace; font-size:.78rem;">{{ m.close_user_id }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-muted">No members in this group.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── Filter JSON ── #}
+<div class="card" style="margin-bottom:1rem;">
+  <h3 style="margin:0 0 .5rem;">Filter JSON</h3>
+  <details>
+    <summary class="text-muted" style="font-size:.85rem; cursor:pointer;">
+      {% if lead_list.filters_json %}Show{% else %}(no filter set){% endif %}
+    </summary>
+    {% if lead_list.filters_json %}
+      <pre style="font-size:.78rem; background:#f9fafb; padding:.75rem; border-radius:4px; overflow-x:auto; margin-top:.5rem;">{{ lead_list.filters_json | tojson(indent=2) }}</pre>
+    {% endif %}
+  </details>
+</div>
+
+{# ── Assignment history ── #}
+<div class="card">
+  <h3 style="margin:0 0 .5rem;">
+    Assignment log
+    <span class="text-muted" style="font-weight:400; font-size:.85rem;">
+      ({{ logs.total }} total{% if logs.total > logs.per_page %} · page {{ logs.page }} of {{ logs.pages }}{% endif %})
+    </span>
+  </h3>
+  {% if logs.items %}
+    <table style="font-size:.85rem;">
+      <thead>
+        <tr>
+          <th style="width:170px;">When (UTC)</th>
+          <th>Lead</th>
+          <th>Assigned to</th>
+          <th>Workflow triggered</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs.items %}
+        <tr>
+          <td class="text-muted" style="font-family:monospace; font-size:.78rem;">
+            {{ log.assigned_at.strftime('%Y-%m-%d %H:%M:%S') }}
+          </td>
+          <td>
+            <a href="https://app.close.com/lead/{{ log.close_lead_id }}/" target="_blank" rel="noopener">
+              {{ log.close_lead_name or log.close_lead_id }}
+            </a>
+          </td>
+          <td>
+            {% if log.close_user_name or log.close_user_id %}
+              {{ log.close_user_name or log.close_user_id }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if log.workflow_id %}
+              {% if log.workflow_subscription_id %}
+                <a href="https://app.close.com/workflows/{{ log.workflow_id }}/runs/{{ log.workflow_subscription_id }}"
+                   target="_blank" rel="noopener">
+                  {{ log.workflow_name or log.workflow_id }}
+                </a>
+              {% else %}
+                {{ log.workflow_name or log.workflow_id }}
+              {% endif %}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if logs.pages > 1 %}
+    <div style="display:flex; justify-content:space-between; margin-top:.75rem; font-size:.85rem;">
+      <div>
+        {% if logs.has_prev %}
+          <a href="{{ url_for('admin.superadmin_lead_list', lead_list_id=lead_list.id, page=logs.prev_num) }}">← Previous</a>
+        {% endif %}
+      </div>
+      <div>
+        {% if logs.has_next %}
+          <a href="{{ url_for('admin.superadmin_lead_list', lead_list_id=lead_list.id, page=logs.next_num) }}">Next →</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  {% else %}
+    <p class="text-muted" style="margin:0;">No assignments recorded for this list.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -218,7 +218,9 @@
     <tbody>
       {% for queue in queues %}
       <tr>
-        <td style="font-weight:500;">{{ queue.name }}</td>
+        <td style="font-weight:500;">
+          <a href="{{ url_for('admin.superadmin_lead_list', lead_list_id=queue.id) }}">{{ queue.name }}</a>
+        </td>
         <td class="text-muted" style="font-size:.85rem;">
           {{ queue.rotation.name if queue.rotation else '—' }}
         </td>
