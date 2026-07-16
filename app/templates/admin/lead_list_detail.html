@@ -6,7 +6,7 @@
   <a href="{{ url_for('admin.superadmin_dashboard') }}#lead-lists" class="text-muted" style="font-size:.85rem;">← Back to /system</a>
 </div>
 
-<div class="page-header">
+<div class="page-header" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
   <h1 style="margin:0;">
     {{ lead_list.name }}
     {% if lead_list.status == 'active' %}
@@ -17,6 +17,15 @@
       <span class="badge badge-gray" style="font-size:.7rem; vertical-align:middle;">{{ lead_list.status | capitalize }}</span>
     {% endif %}
   </h1>
+  {% if lead_list.status in ('active', 'paused') %}
+    <form method="post"
+          action="{{ url_for('admin.superadmin_toggle_lead_list', lead_list_id=lead_list.id) }}"
+          onsubmit="return confirm('{% if lead_list.status == 'paused' %}Resume this Lead List for the customer? Robin will re-seed and start polling on the next tick.{% else %}Pause this Lead List for the customer? Robin will stop polling until resumed.{% endif %}');">
+      <button type="submit" class="btn {% if lead_list.status == 'paused' %}btn-primary{% else %}btn-outline{% endif %}">
+        {% if lead_list.status == 'paused' %}Resume{% else %}Pause{% endif %} as super-admin
+      </button>
+    </form>
+  {% endif %}
 </div>
 
 <p class="text-muted" style="font-size:.85rem; margin-top:-.5rem;">
@@ -157,13 +166,25 @@
 {# ── Filter JSON ── #}
 <div class="card" style="margin-bottom:1rem;">
   <h3 style="margin:0 0 .5rem;">Filter JSON</h3>
-  <details>
+  <details {% if not lead_list.filters_json %}open{% endif %}>
     <summary class="text-muted" style="font-size:.85rem; cursor:pointer;">
-      {% if lead_list.filters_json %}Show{% else %}(no filter set){% endif %}
+      {% if lead_list.filters_json %}Show / edit{% else %}(no filter set — click to add){% endif %}
     </summary>
-    {% if lead_list.filters_json %}
-      <pre style="font-size:.78rem; background:#f9fafb; padding:.75rem; border-radius:4px; overflow-x:auto; margin-top:.5rem;">{{ lead_list.filters_json | tojson(indent=2) }}</pre>
-    {% endif %}
+    <form method="post"
+          action="{{ url_for('admin.superadmin_update_lead_list_filter', lead_list_id=lead_list.id) }}"
+          onsubmit="return confirm('Replace this Lead List\'s filter for the customer? The list will be re-seeded from the current Close state, so any leads currently matching the new filter will NOT be retroactively acted on.');"
+          style="margin-top:.5rem;">
+      <textarea name="filters_json"
+                spellcheck="false"
+                style="width:100%; min-height:240px; font-family:monospace; font-size:.78rem;
+                       background:#f9fafb; padding:.75rem; border:1px solid var(--border);
+                       border-radius:4px; box-sizing:border-box;">{% if lead_list.filters_json %}{{ lead_list.filters_json | tojson(indent=2) }}{% endif %}</textarea>
+      <p class="text-muted" style="font-size:.78rem; margin:.5rem 0;">
+        Must be valid JSON. Saving triggers a re-seed so old matches are not
+        retroactively assigned — same behavior as the customer-facing edit page.
+      </p>
+      <button type="submit" class="btn btn-primary btn-sm">Save filter as super-admin</button>
+    </form>
   </details>
 </div>
 
