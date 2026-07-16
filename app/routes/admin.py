@@ -74,6 +74,47 @@ def superadmin_org(org_id):
     return render_template("admin/org_detail.html", org=org, org_users=org_users)
 
 
+@admin_bp.route("/system/lead-lists/<lead_list_id>")
+@login_required
+@superadmin_required
+def superadmin_lead_list(lead_list_id):
+    """
+    Support-triage view showing everything Robin knows about a Lead List
+    without going through any of the customer's org scoping. Meant for
+    answering "why isn't this list assigning?" without SSH access.
+    """
+    from ..models.lead_list import LeadList
+    from ..models.assignment_log import AssignmentLog
+    from ..models.organization import Organization
+
+    lead_list = db.session.get(LeadList, lead_list_id)
+    if lead_list is None:
+        abort(404)
+
+    org = None
+    if lead_list.close_org_id:
+        org = Organization.query.filter_by(close_org_id=lead_list.close_org_id).first()
+
+    page = request.args.get("page", 1, type=int)
+    logs = (
+        AssignmentLog.query
+        .filter_by(queue_id=lead_list.id)
+        .order_by(AssignmentLog.assigned_at.desc())
+        .paginate(page=page, per_page=50, error_out=False)
+    )
+
+    seeded_ids = lead_list.seeded_lead_ids or []
+
+    return render_template(
+        "admin/lead_list_detail.html",
+        lead_list=lead_list,
+        org=org,
+        logs=logs,
+        seeded_count=len(seeded_ids),
+        seeded_preview=seeded_ids[:10],
+    )
+
+
 @admin_bp.route("/admin/users")
 @login_required
 @admin_required
