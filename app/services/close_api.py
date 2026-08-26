@@ -5,16 +5,59 @@ Handles OAuth token exchange/refresh and wraps common API calls.
 All methods raise CloseAPIError on non-2xx responses.
 """
 
+import time
 from datetime import datetime, timedelta
 from typing import Optional, List
 import requests
 from flask import current_app
 
 
+# Rate-limit (HTTP 429) retry policy. Close throttles per-organization, and
+# Robin funnels every org's polling through one token, so 429s are expected
+# under load. We honor Close's own "wait this long" hint and retry a bounded
+# number of times before surfacing the error.
+_RATELIMIT_MAX_RETRIES = 3      # retries after the first attempt
+_RATELIMIT_DEFAULT_WAIT = 2.0   # seconds, when Close gives no reset hint
+_RATELIMIT_MAX_WAIT = 30.0      # cap a single wait so a poll can't hang
+
+
 class CloseAPIError(Exception):
     def __init__(self, message, status_code=None):
         super().__init__(message)
         self.status_code = status_code
+
+
+def _retry_after_seconds(resp) -> float:
+    """
+    How long Close is asking us to wait before retrying a 429, in seconds.
+
+    Prefers the standard ``Retry-After`` header, then the IETF RateLimit
+    ``reset`` hint — Close sends it both as a ``RateLimit-Reset`` header and
+    packed into a combined ``ratelimit`` header (e.g. ``limit=60, reset=1.5``).
+    Falls back to a fixed default, and always clamps to ``_RATELIMIT_MAX_WAIT``.
+    """
+    candidates = []
+
+    for header in ("Retry-After", "RateLimit-Reset"):
+        raw = resp.headers.get(header)
+        if raw:
+            try:
+                candidates.append(float(raw))
+            except ValueError:
+                pass
+
+    combined = resp.headers.get("ratelimit") or resp.headers.get("RateLimit")
+    if combined:
+        for part in combined.replace(";", ",").split(","):
+            part = part.strip()
+            if part.startswith("reset="):
+                try:
+                    candidates.append(float(part.split("=", 1)[1]))
+                except ValueError:
+                    pass
+
+    wait = max(candidates) if candidates else _RATELIMIT_DEFAULT_WAIT
+    return min(max(wait, 0.0), _RATELIMIT_MAX_WAIT)
 
 
 def _format_http_error(action: str, resp) -> str:
@@ -113,44 +156,48 @@ class CloseClient:
             )
         db.session.commit()
 
-    def _post(self, path: str, json: dict = None) -> dict:
+    def _request(self, method: str, path: str, **kwargs) -> dict:
+        """
+        Issue an authenticated request to Close, transparently retrying on
+        HTTP 429 (rate limit). Close tells us how long to wait via its
+        Retry-After / RateLimit-Reset headers; we honor that (capped) and
+        retry a bounded number of times. Every other non-2xx raises
+        immediately, preserving the diagnostic status + empty-body marker.
+        """
         self._ensure_fresh_token()
-        resp = requests.post(
-            f"{current_app.config['CLOSE_API_BASE']}{path}",
-            headers={"Authorization": f"Bearer {self.user.access_token}"},
-            json=json,
-        )
-        if not resp.ok:
-            raise CloseAPIError(
-                _format_http_error(f"POST {path}", resp), status_code=resp.status_code
+        url = f"{current_app.config['CLOSE_API_BASE']}{path}"
+        attempt = 0
+        while True:
+            resp = requests.request(
+                method,
+                url,
+                headers={"Authorization": f"Bearer {self.user.access_token}"},
+                **kwargs,
             )
-        return resp.json()
+            if resp.status_code == 429 and attempt < _RATELIMIT_MAX_RETRIES:
+                attempt += 1
+                wait = _retry_after_seconds(resp)
+                current_app.logger.warning(
+                    "Close rate-limited %s %s — waiting %.1fs before retry %d/%d",
+                    method, path, wait, attempt, _RATELIMIT_MAX_RETRIES,
+                )
+                time.sleep(wait)
+                continue
+            if not resp.ok:
+                raise CloseAPIError(
+                    _format_http_error(f"{method} {path}", resp),
+                    status_code=resp.status_code,
+                )
+            return resp.json()
+
+    def _post(self, path: str, json: dict = None) -> dict:
+        return self._request("POST", path, json=json)
 
     def _put(self, path: str, json: dict = None) -> dict:
-        self._ensure_fresh_token()
-        resp = requests.put(
-            f"{current_app.config['CLOSE_API_BASE']}{path}",
-            headers={"Authorization": f"Bearer {self.user.access_token}"},
-            json=json,
-        )
-        if not resp.ok:
-            raise CloseAPIError(
-                _format_http_error(f"PUT {path}", resp), status_code=resp.status_code
-            )
-        return resp.json()
+        return self._request("PUT", path, json=json)
 
     def _get(self, path: str, params: dict = None) -> dict:
-        self._ensure_fresh_token()
-        resp = requests.get(
-            f"{current_app.config['CLOSE_API_BASE']}{path}",
-            headers={"Authorization": f"Bearer {self.user.access_token}"},
-            params=params,
-        )
-        if not resp.ok:
-            raise CloseAPIError(
-                _format_http_error(f"GET {path}", resp), status_code=resp.status_code
-            )
-        return resp.json()
+        return self._request("GET", path, params=params)
 
     def get_me(self) -> dict:
         """Fetch the authenticated user's profile."""
