@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong{% endblock %}
+
+{% block content %}
+<div class="error-page">
+  <img src="{{ url_for('static', filename='img/robin-logo.png') }}" alt="Robin">
+  <p class="error-eyebrow">Error 500</p>
+  <h1>Something went wrong</h1>
+  <p class="error-tagline">Even the most faithful bird stumbles now and then.</p>
+  <p class="error-detail">
+    Robin hit an unexpected error while handling your request — nothing you did
+    caused it. Please try again in a moment.
+  </p>
+  <div class="error-notified">
+    <span class="error-notified-dot">✓</span>
+    Our team has been notified and is looking into it.
+  </div>
+  <div class="error-actions">
+    <a href="{{ url_for('main.index') }}" class="btn btn-primary">Back to Robin</a>
+  </div>
+</div>
+{% endblock %}

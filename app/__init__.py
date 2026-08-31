@@ -42,6 +42,39 @@ def create_app(config_class=Config):
     app.register_blueprint(help_bp)
     app.register_blueprint(legal_bp)
 
+    # ── Error handlers ───────────────────────────────────────────────────────
+    # Give users a branded page instead of the bare browser error, and record
+    # every one to the error_logs table so support can triage them from
+    # /system. Recording is best-effort and never raises (see error_logging).
+    from flask import render_template
+    from flask_login import current_user as _current_user
+    from .services.error_logging import log_error
+
+    @app.errorhandler(404)
+    def handle_not_found(exc):
+        # Log 404s only for signed-in users. Anonymous 404s are dominated by
+        # bot/scanner traffic and would bury real customer issues; a signed-in
+        # user hitting a 404 usually means a broken link or a stale URL.
+        if getattr(_current_user, "is_authenticated", False):
+            log_error(404)
+        return render_template("errors/404.html"), 404
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(exc):
+        # Let Flask handle other HTTP errors (403, redirects, etc.) normally;
+        # only intercept genuine unhandled exceptions as 500s.
+        from werkzeug.exceptions import HTTPException
+
+        if isinstance(exc, HTTPException):
+            return exc
+
+        # Roll back first so a poisoned transaction doesn't linger on this
+        # worker, then record the error on a fresh transaction.
+        db.session.rollback()
+        app.logger.exception("Unhandled exception")
+        log_error(500, exc)
+        return render_template("errors/500.html"), 500
+
     # ── Template context ─────────────────────────────────────────────────────
     from .models.user import User as _User
 

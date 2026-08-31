@@ -73,6 +73,19 @@ def callback():
         flash("Unexpected response from Close. Please try again.", "error")
         return redirect(url_for("main.index"))
 
+    try:
+        return _complete_login(token_data, close_user_id, close_org_id)
+    except Exception:
+        # Any DB or unexpected failure past this point should send the user
+        # back with a friendly message rather than a bare 500. Roll back so a
+        # poisoned session doesn't linger on this worker.
+        db.session.rollback()
+        current_app.logger.exception("OAuth callback failed after token exchange")
+        flash("Something went wrong while signing you in. Please try again.", "error")
+        return redirect(url_for("main.index"))
+
+
+def _complete_login(token_data, close_user_id, close_org_id):
     # ── 1. Find or create the Organization ───────────────────────────────────
     org = Organization.query.filter_by(close_org_id=close_org_id).first()
     is_new_org = org is None

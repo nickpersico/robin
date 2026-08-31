@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Page not found{% endblock %}
+
+{% block content %}
+<div class="error-page">
+  <img src="{{ url_for('static', filename='img/robin-logo.png') }}" alt="Robin">
+  <p class="error-eyebrow">Error 404</p>
+  <h1>Page not found</h1>
+  <p class="error-tagline">Even the most faithful bird loses the trail sometimes.</p>
+  <p class="error-detail">
+    We couldn't find the page you're looking for. It may have moved, or the
+    link might be out of date.
+  </p>
+  <div class="error-actions">
+    <a href="{{ url_for('main.index') }}" class="btn btn-primary">Back to Robin</a>
+  </div>
+</div>
+{% endblock %}
