@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}System Errors{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+  <h1>Errors</h1>
+  <a href="{{ url_for('admin.superadmin_dashboard') }}" class="text-muted" style="font-size:.9rem;">← System Dashboard</a>
+</div>
+
+<p class="text-muted" style="margin:0 0 1.25rem;">
+  User-facing errors — every 500, plus 404s hit by signed-in users. Newest first,
+  capped at 250 rows.
+</p>
+
+{# ── Filters ── #}
+<form method="get" class="card" style="padding:1rem 1.25rem; margin-bottom:1.5rem; display:flex; gap:1.25rem; flex-wrap:wrap; align-items:flex-end;">
+  <label style="display:flex; flex-direction:column; gap:.3rem; font-size:.82rem;">
+    <span class="text-muted">Status</span>
+    <select name="status">
+      <option value="" {% if not status %}selected{% endif %}>All</option>
+      <option value="500" {% if status == 500 %}selected{% endif %}>500 — server error</option>
+      <option value="404" {% if status == 404 %}selected{% endif %}>404 — not found</option>
+    </select>
+  </label>
+  <label style="display:flex; flex-direction:column; gap:.3rem; font-size:.82rem;">
+    <span class="text-muted">Last N days</span>
+    <input type="number" name="days" min="0" value="{{ days }}" style="width:6rem;">
+  </label>
+  <label style="display:flex; flex-direction:column; gap:.3rem; font-size:.82rem;">
+    <span class="text-muted">Close Org ID</span>
+    <input type="text" name="org" value="{{ org or '' }}" placeholder="orga_…" style="width:16rem; font-family:monospace;">
+  </label>
+  <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+  {% if status or org or days != 7 %}
+  <a href="{{ url_for('admin.superadmin_errors') }}" class="btn btn-outline btn-sm">Reset</a>
+  {% endif %}
+</form>
+
+<div class="card">
+  {% if errors %}
+  <table>
+    <thead>
+      <tr>
+        <th>When (UTC)</th>
+        <th>Status</th>
+        <th>User</th>
+        <th>Where</th>
+        <th>Error</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in errors %}
+      <tr>
+        <td class="text-muted" style="white-space:nowrap;">{{ e.occurred_at.strftime('%b %d, %H:%M:%S') }}</td>
+        <td>
+          {% if e.status_code >= 500 %}
+            <span class="badge badge-red">{{ e.status_code }}</span>
+          {% else %}
+            <span class="badge badge-gray">{{ e.status_code }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if e.user_email %}
+            <div>{{ e.user_email }}</div>
+            {% if e.close_org_id %}
+              <div class="text-muted" style="font-size:.78rem;">{{ org_map.get(e.close_org_id, e.close_org_id) }}</div>
+            {% endif %}
+          {% else %}
+            <span class="text-muted">(anonymous)</span>
+          {% endif %}
+        </td>
+        <td style="max-width:320px;">
+          <div style="font-family:monospace; font-size:.8rem; word-break:break-all;">
+            <strong>{{ e.method }}</strong> {{ e.path }}
+          </div>
+          {% if e.endpoint %}
+            <div class="text-muted" style="font-size:.78rem;">{{ e.endpoint }}</div>
+          {% endif %}
+        </td>
+        <td style="max-width:360px;">
+          {% if e.error_type %}
+            <div style="font-weight:500;">{{ e.error_type }}</div>
+          {% endif %}
+          {% if e.error_message %}
+            <div class="text-muted" style="font-size:.8rem; word-break:break-word;">{{ e.error_message }}</div>
+          {% endif %}
+          {% if e.traceback %}
+            <details style="margin-top:.4rem;">
+              <summary style="cursor:pointer; font-size:.78rem; color:var(--primary);">Traceback</summary>
+              <pre style="white-space:pre-wrap; word-break:break-word; font-size:.72rem; background:var(--border-light); padding:.6rem; border-radius:6px; margin:.4rem 0 0; max-height:320px; overflow:auto;">{{ e.traceback }}</pre>
+            </details>
+          {% endif %}
+          {% if e.user_agent %}
+            <details style="margin-top:.3rem;">
+              <summary style="cursor:pointer; font-size:.72rem;" class="text-muted">Client</summary>
+              <div class="text-muted" style="font-size:.72rem; margin-top:.3rem;">
+                <div><strong>UA:</strong> {{ e.user_agent }}</div>
+                {% if e.remote_addr %}<div><strong>IP:</strong> {{ e.remote_addr }}</div>{% endif %}
+                {% if e.referrer %}<div><strong>Referrer:</strong> {{ e.referrer }}</div>{% endif %}
+              </div>
+            </details>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No errors match these filters. 🎉</p>
+  {% endif %}
+</div>
+{% endblock %}
