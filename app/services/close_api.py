@@ -19,6 +19,17 @@ from flask import current_app
 _RATELIMIT_MAX_RETRIES = 3      # retries after the first attempt
 _RATELIMIT_DEFAULT_WAIT = 2.0   # seconds, when Close gives no reset hint
 _RATELIMIT_MAX_WAIT = 30.0      # cap a single wait so a poll can't hang
+# Cap the *cumulative* time spent sleeping on 429 retries within a single
+# request. Login happens on a synchronous request that shares gunicorn's
+# 120s worker timeout, so unbounded backoff could hang a request until the
+# worker is killed (a raw 500). Once we've waited this long in total, give
+# up and surface the 429 instead of sleeping further.
+_RATELIMIT_MAX_TOTAL_WAIT = 45.0
+
+# (connect, read) timeout for every Close HTTP call. Without this, a stalled
+# Close connection holds the worker thread until gunicorn's 120s timeout
+# kills it — surfacing as an unexplained Internal Server Error.
+_HTTP_TIMEOUT = (5.0, 30.0)
 
 
 class CloseAPIError(Exception):
@@ -60,6 +71,21 @@ def _retry_after_seconds(resp) -> float:
     return min(max(wait, 0.0), _RATELIMIT_MAX_WAIT)
 
 
+def _parse_json(action: str, resp) -> dict:
+    """
+    Decode a 2xx response body as JSON, converting a malformed/empty body
+    into a CloseAPIError instead of letting a raw JSONDecodeError (a
+    ValueError) escape as an unhandled 500. Close can occasionally answer a
+    2xx through a proxy with a non-JSON body.
+    """
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise CloseAPIError(
+            f"{action} returned a non-JSON response (HTTP {resp.status_code})"
+        ) from exc
+
+
 def _format_http_error(action: str, resp) -> str:
     """
     Build a diagnostic error string that always names the HTTP status code
@@ -75,39 +101,53 @@ def _format_http_error(action: str, resp) -> str:
 
 def exchange_code_for_tokens(code: str) -> dict:
     """Exchange an authorization code for access + refresh tokens."""
-    resp = requests.post(
-        current_app.config["CLOSE_TOKEN_URL"],
-        data={
-            "client_id": current_app.config["CLOSE_CLIENT_ID"],
-            "client_secret": current_app.config["CLOSE_CLIENT_SECRET"],
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": current_app.config["CLOSE_REDIRECT_URI"],
-        },
-    )
+    try:
+        resp = requests.post(
+            current_app.config["CLOSE_TOKEN_URL"],
+            data={
+                "client_id": current_app.config["CLOSE_CLIENT_ID"],
+                "client_secret": current_app.config["CLOSE_CLIENT_SECRET"],
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": current_app.config["CLOSE_REDIRECT_URI"],
+            },
+            timeout=_HTTP_TIMEOUT,
+        )
+    except requests.exceptions.RequestException as exc:
+        raise CloseAPIError(f"Token exchange failed: {exc.__class__.__name__}") from exc
     if not resp.ok:
         raise CloseAPIError(
             _format_http_error("Token exchange", resp), status_code=resp.status_code
         )
-    return resp.json()
+    data = _parse_json("Token exchange", resp)
+    if not data.get("access_token"):
+        raise CloseAPIError("Token exchange succeeded but returned no access_token.")
+    return data
 
 
 def refresh_access_token(refresh_token: str) -> dict:
     """Use a refresh token to get a new access token."""
-    resp = requests.post(
-        current_app.config["CLOSE_TOKEN_URL"],
-        data={
-            "client_id": current_app.config["CLOSE_CLIENT_ID"],
-            "client_secret": current_app.config["CLOSE_CLIENT_SECRET"],
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-        },
-    )
+    try:
+        resp = requests.post(
+            current_app.config["CLOSE_TOKEN_URL"],
+            data={
+                "client_id": current_app.config["CLOSE_CLIENT_ID"],
+                "client_secret": current_app.config["CLOSE_CLIENT_SECRET"],
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
+            timeout=_HTTP_TIMEOUT,
+        )
+    except requests.exceptions.RequestException as exc:
+        raise CloseAPIError(f"Token refresh failed: {exc.__class__.__name__}") from exc
     if not resp.ok:
         raise CloseAPIError(
             _format_http_error("Token refresh", resp), status_code=resp.status_code
         )
-    return resp.json()
+    data = _parse_json("Token refresh", resp)
+    if not data.get("access_token"):
+        raise CloseAPIError("Token refresh succeeded but returned no access_token.")
+    return data
 
 
 def revoke_token(token: str):
@@ -119,6 +159,7 @@ def revoke_token(token: str):
             "client_secret": current_app.config["CLOSE_CLIENT_SECRET"],
             "token": token,
         },
+        timeout=_HTTP_TIMEOUT,
     )
 
 
@@ -166,29 +207,45 @@ class CloseClient:
         """
         self._ensure_fresh_token()
         url = f"{current_app.config['CLOSE_API_BASE']}{path}"
+        kwargs.setdefault("timeout", _HTTP_TIMEOUT)
         attempt = 0
+        total_waited = 0.0
         while True:
-            resp = requests.request(
-                method,
-                url,
-                headers={"Authorization": f"Bearer {self.user.access_token}"},
-                **kwargs,
-            )
-            if resp.status_code == 429 and attempt < _RATELIMIT_MAX_RETRIES:
-                attempt += 1
-                wait = _retry_after_seconds(resp)
-                current_app.logger.warning(
-                    "Close rate-limited %s %s — waiting %.1fs before retry %d/%d",
-                    method, path, wait, attempt, _RATELIMIT_MAX_RETRIES,
+            try:
+                resp = requests.request(
+                    method,
+                    url,
+                    headers={"Authorization": f"Bearer {self.user.access_token}"},
+                    **kwargs,
                 )
-                time.sleep(wait)
-                continue
+            except requests.exceptions.RequestException as exc:
+                raise CloseAPIError(
+                    f"{method} {path} failed: {exc.__class__.__name__}"
+                ) from exc
+            if resp.status_code == 429 and attempt < _RATELIMIT_MAX_RETRIES:
+                wait = _retry_after_seconds(resp)
+                # Bound the cumulative backoff so a rate-limited org can't hang
+                # a synchronous request (e.g. login) past the worker timeout.
+                if total_waited + wait > _RATELIMIT_MAX_TOTAL_WAIT:
+                    current_app.logger.warning(
+                        "Close rate-limited %s %s — giving up after %.1fs total backoff",
+                        method, path, total_waited,
+                    )
+                else:
+                    attempt += 1
+                    total_waited += wait
+                    current_app.logger.warning(
+                        "Close rate-limited %s %s — waiting %.1fs before retry %d/%d",
+                        method, path, wait, attempt, _RATELIMIT_MAX_RETRIES,
+                    )
+                    time.sleep(wait)
+                    continue
             if not resp.ok:
                 raise CloseAPIError(
                     _format_http_error(f"{method} {path}", resp),
                     status_code=resp.status_code,
                 )
-            return resp.json()
+            return _parse_json(f"{method} {path}", resp)
 
     def _post(self, path: str, json: dict = None) -> dict:
         return self._request("POST", path, json=json)

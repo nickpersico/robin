@@ -3,6 +3,7 @@ from .user import User
 from .rotation import Rotation, RotationMember
 from .lead_list import LeadList
 from .assignment_log import AssignmentLog
+from .error_log import ErrorLog
 
 __all__ = [
     "Organization",
@@ -11,4 +12,5 @@ __all__ = [
     "RotationMember",
     "LeadList",
     "AssignmentLog",
+    "ErrorLog",
 ]

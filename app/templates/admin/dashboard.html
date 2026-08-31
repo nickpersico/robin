@@ -24,6 +24,10 @@
     <span class="admin-stat-num">{{ queues | length }}</span>
     <span class="admin-stat-label">Lead Lists</span>
   </a>
+  <a href="{{ url_for('admin.superadmin_errors') }}" class="admin-stat-card">
+    <span class="admin-stat-num">{{ error_count_24h }}</span>
+    <span class="admin-stat-label">Errors (24h)</span>
+  </a>
 </div>
 
 {# ── Organizations ── #}

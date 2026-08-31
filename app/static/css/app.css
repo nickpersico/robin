@@ -787,3 +787,80 @@ tr:last-child td { border-bottom: none; }
 .flex { display: flex; }
 .gap-2 { gap: 0.5rem; }
 .items-center { align-items: center; }
+
+/* ── Error pages (404 / 500) ──────────────────────────────────────────────
+   Same warm, serif-led aesthetic as the landing hero: robin logo, Playfair
+   display code, italic Source Serif tagline. */
+.error-page {
+  min-height: 68vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+}
+.error-page img {
+  width: 88px;
+  height: 88px;
+  border-radius: 18px;
+  margin-bottom: 1.25rem;
+}
+.error-eyebrow {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
+}
+.error-page h1 {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: 2.1rem;
+  color: var(--text-primary);
+  margin: 0.35rem 0 0;
+}
+.error-tagline {
+  font-family: 'Source Serif 4', serif;
+  font-style: italic;
+  font-size: 1.1rem;
+  color: var(--text-muted-dark);
+  margin: 0.55rem 0 0;
+  max-width: 440px;
+}
+.error-detail {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.65;
+  margin: 1.15rem 0 0;
+  max-width: 420px;
+}
+.error-notified {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--primary-light);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+.error-notified .error-notified-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.error-actions {
+  margin-top: 1.85rem;
+}

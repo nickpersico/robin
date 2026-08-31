@@ -44,9 +44,11 @@ def superadmin_required(f):
 @login_required
 @superadmin_required
 def superadmin_dashboard():
+    from datetime import datetime, timedelta
     from ..models.organization import Organization
     from ..models.rotation import Rotation
     from ..models.lead_list import LeadList
+    from ..models.error_log import ErrorLog
 
     organizations = Organization.query.order_by(Organization.name).all()
     users = User.query.order_by(User.created_at.desc()).all()
@@ -55,6 +57,9 @@ def superadmin_dashboard():
 
     org_map = {o.close_org_id: (o.name or o.close_org_id) for o in organizations}
 
+    since = datetime.utcnow() - timedelta(hours=24)
+    error_count_24h = ErrorLog.query.filter(ErrorLog.occurred_at >= since).count()
+
     return render_template(
         "admin/dashboard.html",
         organizations=organizations,
@@ -62,6 +67,44 @@ def superadmin_dashboard():
         rotations=rotations,
         queues=queues,
         org_map=org_map,
+        error_count_24h=error_count_24h,
+    )
+
+
+@admin_bp.route("/system/errors")
+@login_required
+@superadmin_required
+def superadmin_errors():
+    """Recent user-facing errors (500s + signed-in 404s) for support triage."""
+    from datetime import datetime, timedelta
+    from ..models.error_log import ErrorLog
+
+    # Optional filters: ?status=500|404, ?org=<close_org_id>, ?days=<int>
+    status = request.args.get("status", type=int)
+    org = request.args.get("org")
+    days = request.args.get("days", default=7, type=int)
+
+    q = ErrorLog.query
+    if status:
+        q = q.filter(ErrorLog.status_code == status)
+    if org:
+        q = q.filter(ErrorLog.close_org_id == org)
+    if days and days > 0:
+        q = q.filter(ErrorLog.occurred_at >= datetime.utcnow() - timedelta(days=days))
+
+    # Cap the page to keep the view fast; newest first.
+    errors = q.order_by(ErrorLog.occurred_at.desc()).limit(250).all()
+
+    from ..models.organization import Organization
+    org_map = {o.close_org_id: (o.name or o.close_org_id) for o in Organization.query.all()}
+
+    return render_template(
+        "admin/errors.html",
+        errors=errors,
+        org_map=org_map,
+        status=status,
+        org=org,
+        days=days,
     )
 
 
