@@ -40,34 +40,166 @@ def superadmin_required(f):
 # Super-admin dashboard
 # ---------------------------------------------------------------------------
 
+def _org_name_map():
+    """close_org_id -> display name (name or the id as fallback)."""
+    from ..models.organization import Organization
+    return {o.close_org_id: (o.name or o.close_org_id) for o in Organization.query.all()}
+
+
 @admin_bp.route("/system")
 @login_required
 @superadmin_required
 def superadmin_dashboard():
+    """Scannable overview: headline stats, system health, recent activity."""
     from datetime import datetime, timedelta
+    from sqlalchemy import func, or_, text
     from ..models.organization import Organization
-    from ..models.rotation import Rotation
-    from ..models.lead_list import LeadList
+    from ..models.lead_list import LeadList, STATUS_ACTIVE
+    from ..models.assignment_log import AssignmentLog
     from ..models.error_log import ErrorLog
 
-    organizations = Organization.query.order_by(Organization.name).all()
-    users = User.query.order_by(User.created_at.desc()).all()
-    rotations = Rotation.query.order_by(Rotation.close_org_id, Rotation.name).all()
-    queues = LeadList.query.order_by(LeadList.created_at.desc()).all()
+    now = datetime.utcnow()
 
-    org_map = {o.close_org_id: (o.name or o.close_org_id) for o in organizations}
+    def assigned_since(delta):
+        q = AssignmentLog.query
+        if delta is not None:
+            q = q.filter(AssignmentLog.assigned_at >= now - delta)
+        return q.count()
 
-    since = datetime.utcnow() - timedelta(hours=24)
-    error_count_24h = ErrorLog.query.filter(ErrorLog.occurred_at >= since).count()
+    stats = {
+        "assigned_24h": assigned_since(timedelta(hours=24)),
+        "assigned_7d": assigned_since(timedelta(days=7)),
+        "assigned_30d": assigned_since(timedelta(days=30)),
+        "assigned_all": assigned_since(None),
+        "active_lists": LeadList.query.filter_by(status=STATUS_ACTIVE).count(),
+        "active_users": User.query.filter_by(status=STATUS_ACTIVE).count(),
+        "organizations": Organization.query.count(),
+    }
+
+    # Health — cheap signals only (no live Close API calls on page load).
+    try:
+        db_writable = db.session.execute(text("SHOW transaction_read_only")).scalar() == "off"
+    except Exception:
+        db_writable = False
+    stale_cutoff = now - timedelta(minutes=15)
+    health = {
+        "db_writable": db_writable,
+        "last_assignment_at": db.session.query(func.max(AssignmentLog.assigned_at)).scalar(),
+        "stale_lists": LeadList.query.filter(
+            LeadList.status == STATUS_ACTIVE,
+            or_(LeadList.last_checked_at.is_(None), LeadList.last_checked_at < stale_cutoff),
+        ).count(),
+        "errors_24h": ErrorLog.query.filter(ErrorLog.occurred_at >= now - timedelta(hours=24)).count(),
+    }
+
+    recent = (
+        AssignmentLog.query
+        .order_by(AssignmentLog.assigned_at.desc())
+        .limit(15)
+        .all()
+    )
 
     return render_template(
         "admin/dashboard.html",
-        organizations=organizations,
-        users=users,
-        rotations=rotations,
-        queues=queues,
-        org_map=org_map,
-        error_count_24h=error_count_24h,
+        stats=stats, health=health, recent=recent, org_map=_org_name_map(), now=now,
+    )
+
+
+@admin_bp.route("/system/organizations")
+@login_required
+@superadmin_required
+def superadmin_organizations():
+    from sqlalchemy import func
+    from ..models.organization import Organization
+    from ..models.lead_list import LeadList
+
+    q = (request.args.get("q") or "").strip()
+    query = Organization.query
+    if q:
+        query = query.filter(Organization.name.ilike(f"%{q}%"))
+    organizations = query.order_by(Organization.name).all()
+    list_counts = dict(
+        db.session.query(LeadList.close_org_id, func.count(LeadList.id))
+        .group_by(LeadList.close_org_id).all()
+    )
+    return render_template(
+        "admin/system_organizations.html",
+        organizations=organizations, list_counts=list_counts, q=q,
+    )
+
+
+@admin_bp.route("/system/users")
+@login_required
+@superadmin_required
+def superadmin_users():
+    from ..models.organization import Organization
+
+    status = request.args.get("status", "active")
+    role = request.args.get("role") or ""
+    org = request.args.get("org") or ""
+    query = User.query
+    if status and status != "all":
+        query = query.filter(User.status == status)
+    if role:
+        query = query.filter(User.role == role)
+    if org:
+        query = query.filter(User.close_org_id == org)
+    page = request.args.get("page", 1, type=int)
+    users = query.order_by(User.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
+    return render_template(
+        "admin/system_users.html",
+        users=users, org_map=_org_name_map(),
+        all_orgs=Organization.query.order_by(Organization.name).all(),
+        status=status, role=role, org=org,
+    )
+
+
+@admin_bp.route("/system/groups")
+@login_required
+@superadmin_required
+def superadmin_groups():
+    from ..models.rotation import Rotation
+    from ..models.organization import Organization
+
+    org = request.args.get("org") or ""
+    query = Rotation.query
+    if org:
+        query = query.filter(Rotation.close_org_id == org)
+    page = request.args.get("page", 1, type=int)
+    groups = query.order_by(Rotation.close_org_id, Rotation.name).paginate(
+        page=page, per_page=50, error_out=False
+    )
+    return render_template(
+        "admin/system_groups.html",
+        groups=groups, org_map=_org_name_map(),
+        all_orgs=Organization.query.order_by(Organization.name).all(),
+        org=org,
+    )
+
+
+@admin_bp.route("/system/lead-lists")
+@login_required
+@superadmin_required
+def superadmin_lead_lists():
+    from ..models.lead_list import LeadList
+    from ..models.organization import Organization
+
+    status = request.args.get("status", "active")
+    org = request.args.get("org") or ""
+    query = LeadList.query
+    if status and status != "all":
+        query = query.filter(LeadList.status == status)
+    if org:
+        query = query.filter(LeadList.close_org_id == org)
+    page = request.args.get("page", 1, type=int)
+    lists = query.order_by(LeadList.created_at.desc()).paginate(
+        page=page, per_page=50, error_out=False
+    )
+    return render_template(
+        "admin/system_lead_lists.html",
+        lists=lists, org_map=_org_name_map(),
+        all_orgs=Organization.query.order_by(Organization.name).all(),
+        status=status, org=org,
     )
 
 

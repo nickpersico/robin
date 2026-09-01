@@ -1,0 +1,111 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Users{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Users</h1>
+</div>
+
+{# ── Filters (default: active) ── #}
+<form method="get" class="card" style="padding:1rem 1.25rem; margin-bottom:1.5rem; display:flex; gap:1.25rem; flex-wrap:wrap; align-items:flex-end;">
+  <label style="display:flex; flex-direction:column; gap:.3rem; font-size:.82rem;">
+    <span class="text-muted">Status</span>
+    <select name="status">
+      <option value="active"    {% if status == 'active' %}selected{% endif %}>Active</option>
+      <option value="pending"   {% if status == 'pending' %}selected{% endif %}>Pending</option>
+      <option value="suspended" {% if status == 'suspended' %}selected{% endif %}>Suspended</option>
+      <option value="all"       {% if status == 'all' %}selected{% endif %}>All</option>
+    </select>
+  </label>
+  <label style="display:flex; flex-direction:column; gap:.3rem; font-size:.82rem;">
+    <span class="text-muted">Role</span>
+    <select name="role">
+      <option value=""       {% if not role %}selected{% endif %}>All</option>
+      <option value="admin"  {% if role == 'admin' %}selected{% endif %}>Admin</option>
+      <option value="member" {% if role == 'member' %}selected{% endif %}>Member</option>
+    </select>
+  </label>
+  <label style="display:flex; flex-direction:column; gap:.3rem; font-size:.82rem;">
+    <span class="text-muted">Organization</span>
+    <select name="org">
+      <option value="">All</option>
+      {% for o in all_orgs %}
+        <option value="{{ o.close_org_id }}" {% if org == o.close_org_id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+  {% if status != 'active' or role or org %}
+  <a href="{{ url_for('admin.superadmin_users') }}" class="btn btn-outline btn-sm">Reset</a>
+  {% endif %}
+</form>
+
+<div class="card">
+  {% if users.items %}
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Organization</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Joined</th>
+        <th>Last Login</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in users.items %}
+      <tr>
+        <td>{{ user.full_name or '—' }}</td>
+        <td class="text-muted">{{ user.email }}</td>
+        <td class="text-muted" style="font-size:.85rem;">
+          {{ org_map.get(user.close_org_id, user.close_org_id or '—') }}
+        </td>
+        <td>
+          {% if user.is_admin %}
+            <span class="badge badge-blue">Admin</span>
+          {% else %}
+            <span class="badge badge-gray">Member</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if user.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+          {% elif user.status == 'pending' %}
+            <span class="badge badge-red">Pending</span>
+          {% else %}
+            <span class="badge badge-gray">Suspended</span>
+          {% endif %}
+        </td>
+        <td class="text-muted">{{ user.created_at.strftime('%b %d, %Y') }}</td>
+        <td class="text-muted">
+          {% if user.last_login_at %}{{ user.last_login_at.strftime('%b %d, %Y') }}{% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% if users.pages > 1 %}
+  <div style="display:flex; justify-content:space-between; margin-top:.75rem; font-size:.85rem;">
+    <div>
+      {% if users.has_prev %}
+        <a href="{{ url_for('admin.superadmin_users', page=users.prev_num, status=status, role=role, org=org) }}">← Previous</a>
+      {% endif %}
+    </div>
+    <div class="text-muted">Page {{ users.page }} of {{ users.pages }}</div>
+    <div>
+      {% if users.has_next %}
+        <a href="{{ url_for('admin.superadmin_users', page=users.next_num, status=status, role=role, org=org) }}">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No users match these filters.</p>
+  {% endif %}
+</div>
+{% endblock %}

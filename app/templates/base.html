@@ -92,7 +92,8 @@
       </div>
     {% endif %}
 
-    {# Navigation #}
+    {# Navigation — overridable so the /system admin area can supply its own nav #}
+    {% block sidebar_nav %}
     <nav class="sidebar-nav">
       <a href="{{ url_for('lead_lists.index') }}"
          {% if request.endpoint and request.endpoint.startswith('lead_lists.') %}class="active"{% endif %}>
@@ -123,6 +124,7 @@
         Activity Log
       </a>
     </nav>
+    {% endblock %}
 
     {# Footer: org, team, sign out #}
     <div class="sidebar-footer">

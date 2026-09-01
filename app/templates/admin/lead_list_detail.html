@@ -1,9 +1,9 @@
-{% extends "base.html" %}
+{% extends "admin/_layout.html" %}
 {% block title %}Lead List · {{ lead_list.name }}{% endblock %}
 
 {% block content %}
 <div style="margin-bottom:1rem;">
-  <a href="{{ url_for('admin.superadmin_dashboard') }}#lead-lists" class="text-muted" style="font-size:.85rem;">← Back to /system</a>
+  <a href="{{ url_for('admin.superadmin_lead_lists') }}" class="text-muted" style="font-size:.85rem;">← Back to Lead Lists</a>
 </div>
 
 <div class="page-header" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">

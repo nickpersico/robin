@@ -1,0 +1,61 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Organizations{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Organizations</h1>
+</div>
+
+{# ── Filters ── #}
+<form method="get" class="card" style="padding:1rem 1.25rem; margin-bottom:1.5rem; display:flex; gap:1.25rem; flex-wrap:wrap; align-items:flex-end;">
+  <label style="display:flex; flex-direction:column; gap:.3rem; font-size:.82rem;">
+    <span class="text-muted">Name</span>
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Search name…" style="width:18rem;">
+  </label>
+  <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+  {% if q %}
+  <a href="{{ url_for('admin.superadmin_organizations') }}" class="btn btn-outline btn-sm">Reset</a>
+  {% endif %}
+</form>
+
+<div class="card">
+  {% if organizations %}
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Close Org ID</th>
+        <th>Users</th>
+        <th>Lead Lists</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for org in organizations %}
+      <tr>
+        <td>
+          <a href="{{ url_for('admin.superadmin_org', org_id=org.id) }}" style="color:var(--primary); font-weight:500;">
+            {{ org.name }}
+          </a>
+        </td>
+        <td class="text-muted" style="font-family:monospace; font-size:.82rem;">{{ org.close_org_id }}</td>
+        <td>
+          {{ org.users.count() }}
+          {% set pending = org.pending_count %}
+          {% if pending > 0 %}
+            <span class="badge badge-red" style="margin-left:.3rem;">{{ pending }} pending</span>
+          {% endif %}
+        </td>
+        <td>{{ list_counts.get(org.close_org_id, 0) }}</td>
+        <td class="text-muted">{{ org.created_at.strftime('%b %d, %Y') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No organizations match.</p>
+  {% endif %}
+</div>
+{% endblock %}

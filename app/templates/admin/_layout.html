@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{# Shared layout for the /system super-admin area: replaces the main-app sidebar
+   nav with admin sections and a link back to the app. All /system/* pages
+   extend this. #}
+
+{% block sidebar_nav %}
+  {% set ep = request.endpoint %}
+  <a href="{{ url_for('main.index') }}" class="admin-nav-back">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+    </svg>
+    Back to Robin
+  </a>
+
+  <p class="sidebar-tagline" style="margin:.4rem 0 .5rem; text-transform:uppercase; letter-spacing:.08em; font-size:.65rem;">System</p>
+
+  <nav class="sidebar-nav">
+    <a href="{{ url_for('admin.superadmin_dashboard') }}"
+       {% if ep == 'admin.superadmin_dashboard' %}class="active"{% endif %}>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      </svg>
+      Overview
+    </a>
+    <a href="{{ url_for('admin.superadmin_organizations') }}"
+       {% if ep in ['admin.superadmin_organizations', 'admin.superadmin_org'] %}class="active"{% endif %}>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/>
+        <path d="M9 9v.01"/><path d="M9 12v.01"/><path d="M9 15v.01"/><path d="M9 18v.01"/>
+      </svg>
+      Organizations
+    </a>
+    <a href="{{ url_for('admin.superadmin_users') }}"
+       {% if ep == 'admin.superadmin_users' %}class="active"{% endif %}>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+      </svg>
+      Users
+    </a>
+    <a href="{{ url_for('admin.superadmin_groups') }}"
+       {% if ep == 'admin.superadmin_groups' %}class="active"{% endif %}>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      Groups
+    </a>
+    <a href="{{ url_for('admin.superadmin_lead_lists') }}"
+       {% if ep in ['admin.superadmin_lead_lists', 'admin.superadmin_lead_list'] %}class="active"{% endif %}>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/>
+        <path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>
+      </svg>
+      Lead Lists
+    </a>
+    <a href="{{ url_for('admin.superadmin_errors') }}"
+       {% if ep == 'admin.superadmin_errors' %}class="active"{% endif %}>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      Errors
+    </a>
+  </nav>
+{% endblock %}
