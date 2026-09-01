@@ -1,10 +1,9 @@
-{% extends "base.html" %}
+{% extends "admin/_layout.html" %}
 {% block title %}System Errors{% endblock %}
 
 {% block content %}
-<div class="page-header" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+<div class="page-header">
   <h1>Errors</h1>
-  <a href="{{ url_for('admin.superadmin_dashboard') }}" class="text-muted" style="font-size:.9rem;">← System Dashboard</a>
 </div>
 
 <p class="text-muted" style="margin:0 0 1.25rem;">

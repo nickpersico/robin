@@ -377,6 +377,10 @@ body:not(.authenticated) .container:has(.landing-page) { max-width: none; paddin
   .main-content {
     margin-left: 0;
     padding-top: 52px;
+    /* Allow the flex child to shrink to the viewport so wide content
+       (tables in .table-scroll) scrolls internally instead of widening
+       the page and preventing stat-card rows from wrapping. */
+    min-width: 0;
   }
   .main-content .container {
     padding: 1.5rem 1rem;
@@ -866,3 +870,43 @@ tr:last-child td { border-bottom: none; }
 .error-actions {
   margin-top: 1.85rem;
 }
+
+/* ── /system admin area ───────────────────────────────────────────────────── */
+.admin-nav-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--sidebar-text);
+  font-size: 0.8rem;
+  padding: 0.3rem 0;
+  text-decoration: none;
+}
+.admin-nav-back:hover { color: var(--sidebar-text-hover); text-decoration: none; }
+
+/* System-health rows on the overview */
+.health-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.9rem;
+}
+.health-row:last-child { border-bottom: none; }
+.health-row .health-label { color: var(--text-secondary); min-width: 8rem; }
+/* the value cell is the last child — push it to the right edge */
+.health-row > :last-child { margin-left: auto; text-align: right; }
+.health-dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  margin-right: 0.45rem;
+  vertical-align: middle;
+}
+.health-dot.ok   { background: #3d8b40; }
+.health-dot.warn { background: #b5673a; }
+.health-dot.bad  { background: var(--danger); }
+
+/* Wide data tables scroll inside their card instead of widening the page. */
+.table-scroll { overflow-x: auto; }

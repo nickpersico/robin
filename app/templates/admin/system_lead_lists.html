@@ -1,0 +1,112 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Lead Lists{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Lead Lists</h1>
+</div>
+
+{# ── Filters (default: active) ── #}
+<form method="get" class="card" style="padding:1rem 1.25rem; margin-bottom:1.5rem; display:flex; gap:1.25rem; flex-wrap:wrap; align-items:flex-end;">
+  <label style="display:flex; flex-direction:column; gap:.3rem; font-size:.82rem;">
+    <span class="text-muted">Status</span>
+    <select name="status">
+      <option value="active"    {% if status == 'active' %}selected{% endif %}>Active</option>
+      <option value="paused"    {% if status == 'paused' %}selected{% endif %}>Paused</option>
+      <option value="pending"   {% if status == 'pending' %}selected{% endif %}>Pending</option>
+      <option value="running"   {% if status == 'running' %}selected{% endif %}>Running</option>
+      <option value="completed" {% if status == 'completed' %}selected{% endif %}>Completed</option>
+      <option value="failed"    {% if status == 'failed' %}selected{% endif %}>Failed</option>
+      <option value="all"       {% if status == 'all' %}selected{% endif %}>All</option>
+    </select>
+  </label>
+  <label style="display:flex; flex-direction:column; gap:.3rem; font-size:.82rem;">
+    <span class="text-muted">Organization</span>
+    <select name="org">
+      <option value="">All</option>
+      {% for o in all_orgs %}
+        <option value="{{ o.close_org_id }}" {% if org == o.close_org_id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+  {% if status != 'active' or org %}
+  <a href="{{ url_for('admin.superadmin_lead_lists') }}" class="btn btn-outline btn-sm">Reset</a>
+  {% endif %}
+</form>
+
+<div class="card">
+  {% if lists.items %}
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Group</th>
+        <th>Organization</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Configured</th>
+        <th>Last Checked</th>
+        <th>Assignments</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for queue in lists.items %}
+      <tr>
+        <td style="font-weight:500;">
+          <a href="{{ url_for('admin.superadmin_lead_list', lead_list_id=queue.id) }}">{{ queue.name }}</a>
+        </td>
+        <td class="text-muted" style="font-size:.85rem;">{{ queue.rotation.name if queue.rotation else '—' }}</td>
+        <td class="text-muted" style="font-size:.85rem;">
+          {{ org_map.get(queue.close_org_id, queue.close_org_id or '—') }}
+        </td>
+        <td class="text-muted" style="font-size:.85rem;">{{ queue.type_label }}</td>
+        <td>
+          {% if queue.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+          {% elif queue.status == 'running' %}
+            <span class="badge badge-blue">Running</span>
+          {% elif queue.status == 'failed' %}
+            <span class="badge badge-red">Failed</span>
+          {% else %}
+            <span class="badge badge-gray">{{ queue.status | capitalize }}</span>
+          {% endif %}
+        </td>
+        <td style="text-align:center;">
+          {% if queue.is_configured %}
+            <span style="color:var(--primary);">&#10003;</span>
+          {% else %}
+            <span style="color:var(--danger);" title="Missing filters or custom field">&#9888;</span>
+          {% endif %}
+        </td>
+        <td class="text-muted" style="font-size:.85rem;">
+          {% if queue.last_checked_at %}{{ queue.last_checked_at.strftime('%b %d, %Y %H:%M') }}{% else %}—{% endif %}
+        </td>
+        <td style="font-size:.85rem;">{{ queue.assignment_logs.count() }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% if lists.pages > 1 %}
+  <div style="display:flex; justify-content:space-between; margin-top:.75rem; font-size:.85rem;">
+    <div>
+      {% if lists.has_prev %}
+        <a href="{{ url_for('admin.superadmin_lead_lists', page=lists.prev_num, status=status, org=org) }}">← Previous</a>
+      {% endif %}
+    </div>
+    <div class="text-muted">Page {{ lists.page }} of {{ lists.pages }}</div>
+    <div>
+      {% if lists.has_next %}
+        <a href="{{ url_for('admin.superadmin_lead_lists', page=lists.next_num, status=status, org=org) }}">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No lead lists match these filters.</p>
+  {% endif %}
+</div>
+{% endblock %}

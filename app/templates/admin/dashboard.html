@@ -1,276 +1,160 @@
-{% extends "base.html" %}
-{% block title %}System Dashboard{% endblock %}
+{% extends "admin/_layout.html" %}
+{% block title %}System Overview{% endblock %}
 
 {% block content %}
 <div class="page-header">
-  <h1>System Dashboard</h1>
+  <h1>System Overview</h1>
 </div>
 
-{# ── Summary stats ── #}
+{# ── Leads assigned ── #}
+<h2 class="admin-section-title">Leads assigned</h2>
 <div style="display:flex; gap:1rem; margin-bottom:2rem; flex-wrap:wrap;">
-  <a href="#organizations" class="admin-stat-card">
-    <span class="admin-stat-num">{{ organizations | length }}</span>
+  <a href="{{ url_for('activity.index') }}" class="admin-stat-card">
+    <span class="admin-stat-num">{{ stats.assigned_24h }}</span>
+    <span class="admin-stat-label">Last 24 hours</span>
+  </a>
+  <div class="admin-stat-card">
+    <span class="admin-stat-num">{{ stats.assigned_7d }}</span>
+    <span class="admin-stat-label">Last 7 days</span>
+  </div>
+  <div class="admin-stat-card">
+    <span class="admin-stat-num">{{ stats.assigned_30d }}</span>
+    <span class="admin-stat-label">Last 30 days</span>
+  </div>
+  <div class="admin-stat-card">
+    <span class="admin-stat-num">{{ stats.assigned_all }}</span>
+    <span class="admin-stat-label">All time</span>
+  </div>
+</div>
+
+{# ── Footprint ── #}
+<h2 class="admin-section-title">Footprint</h2>
+<div style="display:flex; gap:1rem; margin-bottom:2rem; flex-wrap:wrap;">
+  <a href="{{ url_for('admin.superadmin_lead_lists', status='active') }}" class="admin-stat-card">
+    <span class="admin-stat-num">{{ stats.active_lists }}</span>
+    <span class="admin-stat-label">Active Lead Lists</span>
+  </a>
+  <a href="{{ url_for('admin.superadmin_users', status='active') }}" class="admin-stat-card">
+    <span class="admin-stat-num">{{ stats.active_users }}</span>
+    <span class="admin-stat-label">Active Users</span>
+  </a>
+  <a href="{{ url_for('admin.superadmin_organizations') }}" class="admin-stat-card">
+    <span class="admin-stat-num">{{ stats.organizations }}</span>
     <span class="admin-stat-label">Organizations</span>
   </a>
-  <a href="#users" class="admin-stat-card">
-    <span class="admin-stat-num">{{ users | length }}</span>
-    <span class="admin-stat-label">Users</span>
-  </a>
-  <a href="#groups" class="admin-stat-card">
-    <span class="admin-stat-num">{{ rotations | length }}</span>
-    <span class="admin-stat-label">Groups</span>
-  </a>
-  <a href="#lead-lists" class="admin-stat-card">
-    <span class="admin-stat-num">{{ queues | length }}</span>
-    <span class="admin-stat-label">Lead Lists</span>
-  </a>
-  <a href="{{ url_for('admin.superadmin_errors') }}" class="admin-stat-card">
-    <span class="admin-stat-num">{{ error_count_24h }}</span>
-    <span class="admin-stat-label">Errors (24h)</span>
-  </a>
 </div>
 
-{# ── Organizations ── #}
-<h2 class="admin-section-title" id="organizations">Organizations</h2>
-<div class="card" style="margin-bottom:2.5rem;">
-  {% if organizations %}
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Close Org ID</th>
-        <th>Users</th>
-        <th>Created</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for org in organizations %}
-      <tr>
-        <td>
-          <a href="{{ url_for('admin.superadmin_org', org_id=org.id) }}" style="color:var(--primary); font-weight:500;">
-            {{ org.name }}
-          </a>
-        </td>
-        <td class="text-muted" style="font-family:monospace; font-size:.82rem;">{{ org.close_org_id }}</td>
-        <td>
-          {{ org.users.count() }}
-          {% set pending = org.pending_count %}
-          {% if pending > 0 %}
-            <span class="badge badge-red" style="margin-left:.3rem;">{{ pending }} pending</span>
-          {% endif %}
-        </td>
-        <td class="text-muted">{{ org.created_at.strftime('%b %d, %Y') }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="text-muted" style="padding:.5rem 0; margin:0;">No organizations yet.</p>
-  {% endif %}
-</div>
+{# ── System health ── #}
+<h2 class="admin-section-title">System health</h2>
+<div class="card" style="margin-bottom:2.5rem; padding:1.1rem 1.25rem;">
+  {# DB writable #}
+  <div class="health-row">
+    <span class="health-dot {% if health.db_writable %}ok{% else %}bad{% endif %}"></span>
+    <span class="health-label">Database</span>
+    <span>
+      {% if health.db_writable %}Writable{% else %}<strong style="color:var(--danger);">Read-only</strong>{% endif %}
+    </span>
+  </div>
 
-{# ── Users ── #}
-<h2 class="admin-section-title" id="users">Users</h2>
-<div class="card" style="margin-bottom:2.5rem;">
-  {% if users %}
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Organization</th>
-        <th>Role</th>
-        <th>Status</th>
-        <th>Joined</th>
-        <th>Last Login</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for user in users %}
-      <tr>
-        <td>{{ user.full_name or '—' }}</td>
-        <td class="text-muted">{{ user.email }}</td>
-        <td class="text-muted" style="font-size:.85rem;">
-          {{ org_map.get(user.close_org_id, user.close_org_id or '—') }}
-        </td>
-        <td>
-          {% if user.is_admin %}
-            <span class="badge badge-blue">Admin</span>
-          {% else %}
-            <span class="badge badge-gray">Member</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if user.status == 'active' %}
-            <span class="badge badge-green">Active</span>
-          {% elif user.status == 'pending' %}
-            <span class="badge badge-red">Pending</span>
-          {% else %}
-            <span class="badge badge-gray">Suspended</span>
-          {% endif %}
-        </td>
-        <td class="text-muted">{{ user.created_at.strftime('%b %d, %Y') }}</td>
-        <td class="text-muted">
-          {% if user.last_login_at %}
-            {{ user.last_login_at.strftime('%b %d, %Y') }}
-          {% else %}
-            —
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="text-muted" style="padding:.5rem 0; margin:0;">No users yet.</p>
-  {% endif %}
-</div>
+  {# Poller heartbeat — last assignment #}
+  <div class="health-row">
+    {% if health.last_assignment_at %}
+      {% set mins = ((now - health.last_assignment_at).total_seconds() / 60) | int %}
+      <span class="health-dot {% if mins <= 15 %}ok{% elif mins <= 60 %}warn{% else %}bad{% endif %}"></span>
+      <span class="health-label">Poller</span>
+      <span>
+        Last assignment
+        {% if mins < 1 %}&lt; 1 min ago
+        {% elif mins < 120 %}{{ mins }} min ago
+        {% else %}{{ (mins / 60) | int }} hr ago{% endif %}
+        <span class="text-muted" style="font-size:.8rem;">({{ health.last_assignment_at.strftime('%b %d, %H:%M') }} UTC)</span>
+      </span>
+    {% else %}
+      <span class="health-dot warn"></span>
+      <span class="health-label">Poller</span>
+      <span class="text-muted">No assignments recorded yet</span>
+    {% endif %}
+  </div>
 
-{# ── Groups ── #}
-<h2 class="admin-section-title" id="groups">Groups</h2>
-<div class="card" style="margin-bottom:2.5rem;">
-  {% if rotations %}
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Organization</th>
-        <th>Owner</th>
-        <th>Members</th>
-        <th>Lead Lists</th>
-        <th>Created</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for rotation in rotations %}
-      {% set active_members = rotation.members | selectattr('is_active') | list %}
-      <tr>
-        <td style="font-weight:500;">{{ rotation.name }}</td>
-        <td class="text-muted" style="font-size:.85rem;">
-          {{ org_map.get(rotation.close_org_id, rotation.close_org_id) }}
-        </td>
-        <td class="text-muted" style="font-size:.85rem;">
-          {{ rotation.owner.email if rotation.owner else '—' }}
-        </td>
-        <td>
-          {{ rotation.members | length }}
-          {% if active_members | length < rotation.members | length %}
-            <span class="text-muted" style="font-size:.8rem;">({{ active_members | length }} active)</span>
-          {% endif %}
-        </td>
-        <td>{{ rotation.lead_lists.count() }}</td>
-        <td class="text-muted">{{ rotation.created_at.strftime('%b %d, %Y') }}</td>
-      </tr>
-      {# Expand members and lead lists inline #}
-      {% if rotation.members or rotation.lead_lists.count() > 0 %}
-      <tr>
-        <td colspan="6" style="padding:.5rem .75rem 1rem 2rem; background:var(--border-light);">
-          {% if rotation.members %}
-          <div style="margin-bottom:.5rem;">
-            <span style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted-dark);">Members</span>
-            <span style="font-size:.85rem; color:var(--text-secondary); margin-left:.5rem;">
-              {% for m in rotation.members %}
-                <span style="margin-right:.75rem;">
-                  {{ m.close_user_name or m.close_user_email }}
-                  {% if not m.is_active %}<span class="text-muted">(inactive)</span>{% endif %}
-                </span>
-              {% endfor %}
-            </span>
-          </div>
-          {% endif %}
-          {% set qs = rotation.lead_lists.all() %}
-          {% if qs %}
-          <div>
-            <span style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted-dark);">Lead Lists</span>
-            <span style="font-size:.85rem; color:var(--text-secondary); margin-left:.5rem;">
-              {% for q in qs %}
-                {{ q.name }}
-                <span class="badge {% if q.status == 'active' %}badge-green{% elif q.status == 'failed' %}badge-red{% elif q.status == 'running' %}badge-blue{% else %}badge-gray{% endif %}" style="font-size:.65rem;">{{ q.status }}</span>
-                {% if not loop.last %}&nbsp;·&nbsp;{% endif %}
-              {% endfor %}
-            </span>
-          </div>
-          {% endif %}
-        </td>
-      </tr>
+  {# Stale active lists #}
+  <div class="health-row">
+    <span class="health-dot {% if health.stale_lists == 0 %}ok{% else %}warn{% endif %}"></span>
+    <span class="health-label">Active lists</span>
+    <span>
+      {% if health.stale_lists == 0 %}
+        All polled within the last 15 min
+      {% else %}
+        <a href="{{ url_for('admin.superadmin_lead_lists', status='active') }}">
+          {{ health.stale_lists }} not polled in 15+ min
+        </a>
+        <span class="text-muted" style="font-size:.8rem;">— may be a broken connection</span>
       {% endif %}
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="text-muted" style="padding:.5rem 0; margin:0;">No groups yet.</p>
-  {% endif %}
+    </span>
+  </div>
+
+  {# Errors 24h #}
+  <div class="health-row">
+    <span class="health-dot {% if health.errors_24h == 0 %}ok{% else %}bad{% endif %}"></span>
+    <span class="health-label">Errors (24h)</span>
+    <span>
+      {% if health.errors_24h == 0 %}
+        None
+      {% else %}
+        <a href="{{ url_for('admin.superadmin_errors') }}">{{ health.errors_24h }} in the last 24h</a>
+      {% endif %}
+    </span>
+  </div>
+
+  <p class="text-muted" style="font-size:.8rem; margin:.9rem 0 0;">
+    Per-org Close token status isn't checked here (too slow for a page load). Run
+    <code>flask connection-status</code> for live credential health.
+  </p>
 </div>
 
-{# ── Lead Lists ── #}
-<h2 class="admin-section-title" id="lead-lists">Lead Lists</h2>
-<div class="card" style="margin-bottom:2.5rem;">
-  {% if queues %}
+{# ── Recent activity ── #}
+<h2 class="admin-section-title">Recent activity</h2>
+<div class="card">
+  {% if recent %}
+  <div class="table-scroll">
   <table>
     <thead>
       <tr>
-        <th>Name</th>
-        <th>Group</th>
+        <th>When (UTC)</th>
+        <th>Lead</th>
+        <th>Assigned To</th>
+        <th>Lead List</th>
         <th>Organization</th>
-        <th>Type</th>
-        <th>Status</th>
-        <th>Configured</th>
-        <th>Last Checked</th>
-        <th>Assignments</th>
       </tr>
     </thead>
     <tbody>
-      {% for queue in queues %}
+      {% for log in recent %}
+      {% set ll = log.lead_list %}
+      {% set oid = ll.close_org_id or (ll.rotation.close_org_id if ll and ll.rotation) %}
       <tr>
-        <td style="font-weight:500;">
-          <a href="{{ url_for('admin.superadmin_lead_list', lead_list_id=queue.id) }}">{{ queue.name }}</a>
+        <td class="text-muted" style="white-space:nowrap;">{{ log.assigned_at.strftime('%b %d, %H:%M:%S') }}</td>
+        <td>{{ log.close_lead_name or log.close_lead_id }}</td>
+        <td>
+          {% if log.close_user_name or log.close_user_id %}
+            {{ log.close_user_name or log.close_user_id }}
+          {% elif log.workflow_name %}
+            <span class="text-muted">Workflow: {{ log.workflow_name }}</span>
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
         </td>
         <td class="text-muted" style="font-size:.85rem;">
-          {{ queue.rotation.name if queue.rotation else '—' }}
-        </td>
-        <td class="text-muted" style="font-size:.85rem;">
-          {% if queue.rotation %}
-            {{ org_map.get(queue.rotation.close_org_id, queue.rotation.close_org_id) }}
+          {% if ll %}
+            <a href="{{ url_for('admin.superadmin_lead_list', lead_list_id=ll.id) }}">{{ ll.name }}</a>
           {% else %}—{% endif %}
         </td>
-        <td class="text-muted" style="font-size:.85rem;">{{ queue.type_label }}</td>
-        <td>
-          {% if queue.status == 'active' %}
-            <span class="badge badge-green">Active</span>
-          {% elif queue.status == 'running' %}
-            <span class="badge badge-blue">Running</span>
-          {% elif queue.status == 'failed' %}
-            <span class="badge badge-red">Failed</span>
-          {% elif queue.status == 'completed' %}
-            <span class="badge badge-gray">Completed</span>
-          {% elif queue.status == 'paused' %}
-            <span class="badge badge-gray">Paused</span>
-          {% else %}
-            <span class="badge badge-gray">{{ queue.status | capitalize }}</span>
-          {% endif %}
-        </td>
-        <td style="text-align:center;">
-          {% if queue.is_configured %}
-            <span style="color:var(--primary);">&#10003;</span>
-          {% else %}
-            <span style="color:var(--danger);" title="Missing filters or custom field">&#9888;</span>
-          {% endif %}
-        </td>
-        <td class="text-muted" style="font-size:.85rem;">
-          {% if queue.last_checked_at %}
-            {{ queue.last_checked_at.strftime('%b %d, %Y %H:%M') }}
-          {% else %}
-            —
-          {% endif %}
-        </td>
-        <td style="font-size:.85rem;">{{ queue.assignment_logs.count() }}</td>
+        <td class="text-muted" style="font-size:.85rem;">{{ org_map.get(oid, oid or '—') }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
-  <p class="text-muted" style="padding:.5rem 0; margin:0;">No lead lists yet.</p>
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No assignments recorded yet.</p>
   {% endif %}
 </div>
-
 {% endblock %}

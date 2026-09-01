@@ -1,0 +1,82 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Groups{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Groups</h1>
+</div>
+
+{# ── Filters ── #}
+<form method="get" class="card" style="padding:1rem 1.25rem; margin-bottom:1.5rem; display:flex; gap:1.25rem; flex-wrap:wrap; align-items:flex-end;">
+  <label style="display:flex; flex-direction:column; gap:.3rem; font-size:.82rem;">
+    <span class="text-muted">Organization</span>
+    <select name="org">
+      <option value="">All</option>
+      {% for o in all_orgs %}
+        <option value="{{ o.close_org_id }}" {% if org == o.close_org_id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+  {% if org %}
+  <a href="{{ url_for('admin.superadmin_groups') }}" class="btn btn-outline btn-sm">Reset</a>
+  {% endif %}
+</form>
+
+<div class="card">
+  {% if groups.items %}
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Organization</th>
+        <th>Owner</th>
+        <th>Members</th>
+        <th>Lead Lists</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for rotation in groups.items %}
+      {% set active_members = rotation.members | selectattr('is_active') | list %}
+      <tr>
+        <td style="font-weight:500;">{{ rotation.name }}</td>
+        <td class="text-muted" style="font-size:.85rem;">
+          {{ org_map.get(rotation.close_org_id, rotation.close_org_id) }}
+        </td>
+        <td class="text-muted" style="font-size:.85rem;">{{ rotation.owner.email if rotation.owner else '—' }}</td>
+        <td>
+          {{ rotation.members | length }}
+          {% if active_members | length < rotation.members | length %}
+            <span class="text-muted" style="font-size:.8rem;">({{ active_members | length }} active)</span>
+          {% endif %}
+        </td>
+        <td>{{ rotation.lead_lists.count() }}</td>
+        <td class="text-muted">{{ rotation.created_at.strftime('%b %d, %Y') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% if groups.pages > 1 %}
+  <div style="display:flex; justify-content:space-between; margin-top:.75rem; font-size:.85rem;">
+    <div>
+      {% if groups.has_prev %}
+        <a href="{{ url_for('admin.superadmin_groups', page=groups.prev_num, org=org) }}">← Previous</a>
+      {% endif %}
+    </div>
+    <div class="text-muted">Page {{ groups.page }} of {{ groups.pages }}</div>
+    <div>
+      {% if groups.has_next %}
+        <a href="{{ url_for('admin.superadmin_groups', page=groups.next_num, org=org) }}">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="text-muted" style="padding:.5rem 0; margin:0;">No groups match these filters.</p>
+  {% endif %}
+</div>
+{% endblock %}
