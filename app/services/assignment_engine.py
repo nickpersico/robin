@@ -28,6 +28,14 @@ from .close_api import CloseClient, CloseAPIError
 
 logger = logging.getLogger(__name__)
 
+# Cap on how many leads a single poll will actually act on (assign / trigger a
+# workflow for). Skipped leads — already-assigned ones caught by the guard —
+# are cheap and don't count. When a poll hits this cap it leaves the list's
+# checkpoint (last_checked_at) untouched so the next cycle re-scans and
+# continues; the guard skips whatever was already done. This keeps one list's
+# big backlog from monopolising a poll cycle or hammering Close all at once.
+MAX_ACTIONS_PER_POLL = 500
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -354,6 +362,8 @@ def poll_queue(lead_list_id: str) -> dict:
                 lead_list_id, lead_list.name, len(leads), after_dt, len(seeded))
 
     assigned = workflow_triggered = skipped = errors = 0
+    actions = 0          # leads we actually acted on this cycle (assign/workflow)
+    capped = False       # True if we stopped early at MAX_ACTIONS_PER_POLL
     sender_cache: dict = {}  # memoized run-as resolution per poll cycle
 
     for lead in leads:
@@ -429,18 +439,34 @@ def poll_queue(lead_list_id: str) -> dict:
             logger.info("LeadList %s: triggered workflow %s for lead '%s'",
                         lead_list_id, lead_list.workflow_name, lead_name or lead_id)
 
-    lead_list.last_checked_at = now
+        actions += 1
+        if actions >= MAX_ACTIONS_PER_POLL:
+            capped = True
+            logger.info(
+                "LeadList %s: hit the per-poll cap of %d — leaving the checkpoint "
+                "and continuing next cycle", lead_list_id, MAX_ACTIONS_PER_POLL,
+            )
+            break
+
+    # Only advance the checkpoint when we drained everything this cycle. If we
+    # hit the cap, leave last_checked_at where it is so the next poll re-scans
+    # and continues — already-actioned leads are skipped by the guard, so
+    # nothing is redone.
+    if not capped:
+        lead_list.last_checked_at = now
     db.session.commit()
 
     logger.info(
-        "LeadList %s done — assigned: %d, workflow: %d, skipped: %d, errors: %d",
+        "LeadList %s done — assigned: %d, workflow: %d, skipped: %d, errors: %d%s",
         lead_list_id, assigned, workflow_triggered, skipped, errors,
+        " (capped, more next cycle)" if capped else "",
     )
     return {
         "assigned": assigned,
         "workflow_triggered": workflow_triggered,
         "skipped": skipped,
         "errors": errors,
+        "capped": capped,
     }
 
 
