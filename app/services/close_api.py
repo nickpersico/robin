@@ -198,35 +198,92 @@ class CloseClient:
         """Refresh the access token if it's expired or about to expire."""
         if self.user.token_expires_at is None:
             return
-        # Refresh if less than 60 seconds remain
+        # Refresh if less than 60 seconds remain.
         if datetime.utcnow() >= self.user.token_expires_at - timedelta(seconds=60):
-            if not self.user.refresh_token:
-                raise CloseAPIError("Access token expired and no refresh token available.")
-            # Don't rotate a token we can't persist — see _db_is_writable. On a
-            # read-only DB this fails the caller gracefully (a caught
-            # CloseAPIError) and leaves the token intact, so syncs auto-resume
-            # once the DB is writable again instead of every org needing to
-            # re-authenticate.
-            if not _db_is_writable():
-                raise CloseAPIError(
-                    "Database is read-only; skipping token refresh to avoid "
-                    "invalidating a token that can't be saved."
-                )
-            token_data = refresh_access_token(self.user.refresh_token)
-            self._update_user_tokens(token_data)
+            self._refresh_token_locked()
 
-    def _update_user_tokens(self, token_data: dict):
-        """Persist refreshed tokens to the user model."""
+    def _refresh_token_locked(self):
+        """
+        Refresh and persist a rotated token atomically, serialized per user.
+
+        Close rotates the refresh token on every refresh and invalidates the old
+        one the moment we call the endpoint. Two workers refreshing the *same*
+        user at once — the in-process poller and a web request, or a separate
+        ``flask`` CLI process — would spend the same refresh token twice; the
+        loser gets ``invalid_grant`` and can take the whole token family down
+        with it, forcing the org to re-authenticate. That is exactly how a
+        connection gets "burned" a second time on a perfectly healthy DB.
+
+        To prevent it we:
+          * check the DB is writable first (see ``_db_is_writable``) — never
+            rotate a token we can't save;
+          * take a ``SELECT ... FOR UPDATE`` lock on the user row and re-read
+            it, so only one worker refreshes at a time and a worker that blocked
+            on the lock adopts the token the winner just wrote instead of
+            spending the (now-consumed) refresh token again;
+          * do the refresh + save in their own short transaction (an
+            independent Session), so the rotation is committed atomically and is
+            never entangled with — nor prematurely commits — a caller's
+            transaction such as the poll loop.
+
+        The row lock is a no-op on SQLite (used in tests) but the re-read logic
+        that makes a second worker skip the refresh still runs there.
+        """
+        from sqlalchemy.orm import Session
         from ..extensions import db
+        from ..models.user import User
 
-        self.user.access_token = token_data["access_token"]
-        if "refresh_token" in token_data:
-            self.user.refresh_token = token_data["refresh_token"]
-        if "expires_in" in token_data:
-            self.user.token_expires_at = datetime.utcnow() + timedelta(
-                seconds=token_data["expires_in"]
+        # A read-only primary can't save a rotated token; skip gracefully so the
+        # caller catches a CloseAPIError and syncs auto-resume once writable,
+        # rather than burning every org's token. Checked before we open the
+        # locking transaction (SELECT ... FOR UPDATE is illegal when read-only).
+        if not _db_is_writable():
+            raise CloseAPIError(
+                "Database is read-only; skipping token refresh to avoid "
+                "invalidating a token that can't be saved."
             )
-        db.session.commit()
+
+        with Session(db.engine) as session:
+            row = (
+                session.query(User)
+                .filter_by(id=self.user.id)
+                .with_for_update()
+                .one()
+            )
+            still_stale = (
+                row.token_expires_at is None
+                or datetime.utcnow() >= row.token_expires_at - timedelta(seconds=60)
+            )
+            if still_stale:
+                if not row.refresh_token:
+                    raise CloseAPIError(
+                        "Access token expired and no refresh token available."
+                    )
+                # If this raises (e.g. invalid_grant) the transaction rolls back
+                # untouched, so we never persist a half-rotated token.
+                token_data = refresh_access_token(row.refresh_token)
+                row.access_token = token_data["access_token"]
+                if token_data.get("refresh_token"):
+                    row.refresh_token = token_data["refresh_token"]
+                if token_data.get("expires_in"):
+                    row.token_expires_at = datetime.utcnow() + timedelta(
+                        seconds=token_data["expires_in"]
+                    )
+                session.flush()
+            # Capture the freshest values (ours, or the worker who beat us to the
+            # lock) before committing releases the row.
+            access = row.access_token
+            refresh = row.refresh_token
+            expires = row.token_expires_at
+            session.commit()
+
+        # Mirror the persisted token onto the caller's in-memory user so this
+        # request uses it. Its expiry is a fresh ~1h out, so no other worker will
+        # refresh again within this poll — a later blanket commit on the caller's
+        # session can only rewrite these columns with the identical value.
+        self.user.access_token = access
+        self.user.refresh_token = refresh
+        self.user.token_expires_at = expires
 
     def _request(self, method: str, path: str, **kwargs) -> dict:
         """
