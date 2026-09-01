@@ -63,14 +63,36 @@ def _inject_date_filter(filters_json: dict, after_dt: Optional[datetime]) -> dic
     return {"type": "and", "queries": [base, date_condition]}
 
 
-def _get_org_user(close_org_id: str) -> Optional[User]:
-    """Find any active user for the org — used to make API calls during polling."""
-    return (
+def _get_org_client(close_org_id: str):
+    """
+    Return a CloseClient backed by the first active org member whose Close
+    connection actually works, or None if the org has no usable connection.
+
+    Robin syncs an org through one team member's Close OAuth connection. That
+    connection can go stale — a member revokes Robin's access, or a rotated
+    refresh token was lost (e.g. during a database outage). Rather than fail the
+    whole org when the first member's connection is broken, we try each active
+    member in creation order and use the first one that can authenticate. An org
+    keeps syncing as long as *any* active member has a working connection.
+    """
+    users = (
         User.query
         .filter_by(close_org_id=close_org_id, status="active")
         .order_by(User.created_at)
-        .first()
+        .all()
     )
+    for user in users:
+        client = CloseClient(user)
+        try:
+            client._ensure_fresh_token()  # no-op when the token is still valid
+            return client
+        except CloseAPIError as e:
+            logger.warning(
+                "Org %s: Close connection for %s is unusable (%s) — trying next member",
+                close_org_id, user.email, e,
+            )
+            continue
+    return None
 
 
 def _sync_rotation_member_active_flags(rotation, active_close_user_ids: set) -> int:
@@ -121,12 +143,11 @@ def seed_queue(lead_list_id: str):
                        lead_list_id)
         return
 
-    org_user = _get_org_user(org_id)
-    if not org_user:
-        logger.warning("seed_queue %s: no active user for org %s", lead_list_id, org_id)
+    client = _get_org_client(org_id)
+    if client is None:
+        logger.warning("seed_queue %s: no usable Close connection for org %s", lead_list_id, org_id)
         return
 
-    client = CloseClient(org_user)
     try:
         existing = client.search_leads(_normalize_filter(lead_list.filters_json))
     except CloseAPIError as e:
@@ -254,12 +275,15 @@ def poll_queue(lead_list_id: str) -> dict:
         logger.error("LeadList %s: cannot resolve org", lead_list_id)
         return {"error": "no_org"}
 
-    org_user = _get_org_user(org_id)
-    if not org_user:
-        logger.error("LeadList %s: no active user for org %s", lead_list_id, org_id)
-        return {"error": "no_org_user"}
+    client = _get_org_client(org_id)
+    if client is None:
+        logger.error(
+            "LeadList %s: no usable Close connection for org %s — every active "
+            "member's token is invalid; the org must re-authenticate",
+            lead_list_id, org_id,
+        )
+        return {"error": "no_usable_connection"}
 
-    client = CloseClient(org_user)
     now = datetime.utcnow()
 
     # Sync rotation member is_active against Close's Team Management before we

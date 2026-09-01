@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 import requests
 from flask import current_app
+from sqlalchemy import text
 
 
 # Rate-limit (HTTP 429) retry policy. Close throttles per-organization, and
@@ -163,6 +164,26 @@ def revoke_token(token: str):
     )
 
 
+def _db_is_writable() -> bool:
+    """
+    True only if the current DB connection can accept writes.
+
+    Close rotates the refresh token on every refresh — the moment we call the
+    refresh endpoint, Close invalidates the old token. If we then can't persist
+    the new one (e.g. the primary is in read-only mode because its disk filled),
+    the token is lost forever and the org must re-authenticate by hand. So we
+    check writability *before* refreshing and refuse to rotate a token we can't
+    save. Any error here is treated as "not writable" — safer to skip a refresh
+    than to burn a token.
+    """
+    from ..extensions import db
+
+    try:
+        return db.session.execute(text("SHOW transaction_read_only")).scalar() == "off"
+    except Exception:
+        return False
+
+
 class CloseClient:
     """
     An authenticated Close API client for a specific user.
@@ -181,6 +202,16 @@ class CloseClient:
         if datetime.utcnow() >= self.user.token_expires_at - timedelta(seconds=60):
             if not self.user.refresh_token:
                 raise CloseAPIError("Access token expired and no refresh token available.")
+            # Don't rotate a token we can't persist — see _db_is_writable. On a
+            # read-only DB this fails the caller gracefully (a caught
+            # CloseAPIError) and leaves the token intact, so syncs auto-resume
+            # once the DB is writable again instead of every org needing to
+            # re-authenticate.
+            if not _db_is_writable():
+                raise CloseAPIError(
+                    "Database is read-only; skipping token refresh to avoid "
+                    "invalidating a token that can't be saved."
+                )
             token_data = refresh_access_token(self.user.refresh_token)
             self._update_user_tokens(token_data)
 

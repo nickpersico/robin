@@ -25,13 +25,22 @@ def healthz():
     Liveness + database-connectivity probe for external uptime monitors.
 
     Public — no auth required. Returns 200 only when the Postgres connection
-    is usable, so external tools (UptimeRobot etc.) can alert on DB outages
-    the same way they alert on app crashes. The DB is what took us down for
-    days without any signal; a pure "app is up" check would not have caught it.
+    is usable *and writable*, so external tools (UptimeRobot etc.) can alert on
+    DB outages the same way they alert on app crashes.
+
+    Checking writability matters: when the DB volume fills, Postgres flips to
+    read-only. Reads (and a bare "SELECT 1") keep succeeding, so a read-only
+    database is invisible to a liveness check — but every write (login, lead
+    assignment) is dead. That exact failure took us down without any signal, so
+    we surface read-only as unhealthy (503) here.
     """
     try:
         db.session.execute(text("SELECT 1"))
-        return jsonify({"ok": True, "db": True}), 200
+        read_only = db.session.execute(text("SHOW transaction_read_only")).scalar()
+        if read_only != "off":
+            logger.error("healthz: database is in read-only mode")
+            return jsonify({"ok": False, "db": True, "writable": False}), 503
+        return jsonify({"ok": True, "db": True, "writable": True}), 200
     except SQLAlchemyError as e:
         logger.exception("healthz: database unreachable")
         return jsonify({"ok": False, "db": False, "error": str(e.__class__.__name__)}), 503
