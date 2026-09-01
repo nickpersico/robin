@@ -505,4 +505,73 @@ def create_app(config_class=Config):
         else:
             click.echo("\nDry run complete. Re-run with --apply to delete.")
 
+    @app.cli.command("prune-assignment-logs")
+    @click.option("--months", default=12, show_default=True, help="Delete rows older than this many months.")
+    @click.option("--apply", is_flag=True, help="Actually delete. Without this it's a dry run.")
+    @click.option("--batch", default=10000, show_default=True, help="Max rows to delete per statement.")
+    def prune_assignment_logs(months, apply, batch):
+        """
+        Retention: delete AssignmentLog rows older than --months, in bounded
+        batches with a commit after each (uses the assigned_at index). Dry run
+        by default. Keeps the table from growing without bound over time.
+        """
+        from datetime import datetime, timedelta
+        from sqlalchemy import text
+
+        cutoff = datetime.utcnow() - timedelta(days=30 * months)
+        total = db.session.execute(
+            text("SELECT count(*) FROM assignment_logs WHERE assigned_at < :c"),
+            {"c": cutoff},
+        ).scalar()
+        click.echo(f"Rows older than {months} month(s) (before {cutoff.date()}): {total}")
+        if not total:
+            click.echo("Nothing to prune.")
+            return
+        if not apply:
+            click.echo("Dry run — re-run with --apply to delete.")
+            return
+
+        delete_sql = text("""
+            DELETE FROM assignment_logs
+            WHERE id IN (
+                SELECT id FROM assignment_logs WHERE assigned_at < :c LIMIT :b
+            )
+        """)
+        deleted = 0
+        while True:
+            res = db.session.execute(delete_sql, {"c": cutoff, "b": batch})
+            db.session.commit()
+            if res.rowcount == 0:
+                break
+            deleted += res.rowcount
+            click.echo(f"  deleted {deleted}…")
+        click.echo(f"\nDone. Removed {deleted} row(s).")
+
+    @app.cli.command("connection-status")
+    def connection_status():
+        """
+        For every org with an active Lead List, show whether Robin can currently
+        reach Close (i.e. whether its OAuth connection still works). Handy for
+        tracking who still needs to re-authenticate after a token reset.
+        """
+        from .models.lead_list import LeadList
+        from .models.organization import Organization
+        from .services.assignment_engine import _get_org_client
+
+        orgs = {
+            r[0] for r in db.session.query(LeadList.close_org_id)
+            .filter_by(status="active").distinct() if r[0]
+        }
+        names = dict(db.session.query(Organization.close_org_id, Organization.name).all())
+        connected = 0
+        for org in sorted(orgs, key=lambda o: names.get(o) or o):
+            try:
+                ok = _get_org_client(org) is not None
+            except Exception:
+                ok = False
+            if ok:
+                connected += 1
+            click.echo(f"  {'CONNECTED' if ok else 'burned   '}  {names.get(org) or org}")
+        click.echo(f"\n{connected}/{len(orgs)} org(s) connected.")
+
     return app
