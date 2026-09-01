@@ -163,6 +163,30 @@ def seed_queue(lead_list_id: str):
 # Core poll logic
 # ---------------------------------------------------------------------------
 
+def _lead_custom_value(lead: dict, field_id: Optional[str]):
+    """
+    Read a lead's custom-field value from a Close search result, tolerant of
+    both response shapes:
+      - flat top-level key   {"custom.cf_x": value}   (how /data/search returns
+        custom fields, and how we write them in assign_lead)
+      - nested dict          {"custom": {"cf_x": value}}
+
+    The original guard only checked the nested shape, but the search API returns
+    the flat shape — so the "field already set" check never matched, and every
+    poll re-assigned + re-logged the same lead. This reads both so the guard
+    actually fires. Returns None if unset/absent.
+    """
+    if not field_id:
+        return None
+    flat = lead.get(f"custom.{field_id}")
+    if flat is not None:
+        return flat
+    nested = lead.get("custom")
+    if isinstance(nested, dict):
+        return nested.get(field_id)
+    return None
+
+
 def _run_assign_action(client, lead_list, lead, lead_id, lead_name) -> dict:
     """
     Try to assign the lead. Returns a dict that may include keys:
@@ -175,7 +199,7 @@ def _run_assign_action(client, lead_list, lead, lead_id, lead_name) -> dict:
         return {"error": "no_rotation"}
 
     if not lead_list.overwrite_existing and lead_list.custom_field_id:
-        existing = (lead.get("custom") or {}).get(lead_list.custom_field_id)
+        existing = _lead_custom_value(lead, lead_list.custom_field_id)
         if existing:
             return {"skipped_reason": "field_already_set"}
 
@@ -311,8 +335,14 @@ def poll_queue(lead_list_id: str) -> dict:
     after_dt = lead_list.last_checked_at or lead_list.created_at
     search_query = _inject_date_filter(_normalize_filter(lead_list.filters_json), after_dt)
 
+    # Explicitly request the target custom field so it comes back in the result
+    # (as a flat "custom.<id>" key) and the "field already set" guard can see it.
+    search_fields = ["id", "display_name", "custom"]
+    if lead_list.custom_field_id:
+        search_fields.append(f"custom.{lead_list.custom_field_id}")
+
     try:
-        leads = client.search_leads(search_query)
+        leads = client.search_leads(search_query, fields=search_fields)
     except CloseAPIError as e:
         logger.error("LeadList %s: search failed: %s", lead_list_id, e)
         return {"error": str(e)}
