@@ -437,4 +437,72 @@ def create_app(config_class=Config):
         if failed:
             raise SystemExit(1)
 
+    @app.cli.command("dedup-assignment-logs")
+    @click.option("--apply", is_flag=True, help="Actually delete rows. Without this flag it's a dry run.")
+    @click.option("--batch", default=10000, show_default=True, help="Max rows to delete per statement.")
+    def dedup_assignment_logs(apply, batch):
+        """
+        Remove duplicate AssignmentLog rows, keeping the earliest per
+        (queue_id, close_lead_id).
+
+        Works one Lead List at a time, deleting in bounded batches and
+        committing after each, so it stays light on the database and is safe to
+        interrupt/resume. Dry run by default — pass --apply to delete.
+
+        A row is deleted only if an earlier row exists for the same list + lead
+        (earlier assigned_at, ties broken by id), so exactly one — the first —
+        assignment per lead survives.
+        """
+        from sqlalchemy import text
+        from .models.lead_list import LeadList
+
+        lead_lists = LeadList.query.order_by(LeadList.created_at).all()
+
+        delete_batch_sql = text("""
+            DELETE FROM assignment_logs
+            WHERE id IN (
+                SELECT a.id FROM assignment_logs a
+                WHERE a.queue_id = :q
+                  AND EXISTS (
+                      SELECT 1 FROM assignment_logs b
+                      WHERE b.queue_id = a.queue_id
+                        AND b.close_lead_id = a.close_lead_id
+                        AND (b.assigned_at < a.assigned_at
+                             OR (b.assigned_at = a.assigned_at AND b.id < a.id))
+                  )
+                LIMIT :batch
+            )
+        """)
+
+        total_deleted = 0
+        for ll in lead_lists:
+            rows = db.session.execute(
+                text("SELECT count(*) FROM assignment_logs WHERE queue_id = :q"),
+                {"q": ll.id},
+            ).scalar()
+            if not rows:
+                continue
+
+            if not apply:
+                click.echo(f"[dry-run] {ll.id} {ll.name!r}: {rows} row(s) — keep 1 per lead")
+                continue
+
+            deleted_here = 0
+            while True:
+                res = db.session.execute(delete_batch_sql, {"q": ll.id, "batch": batch})
+                db.session.commit()
+                if res.rowcount == 0:
+                    break
+                deleted_here += res.rowcount
+                click.echo(f"  {ll.id}: deleted {deleted_here} duplicate(s) so far…")
+            total_deleted += deleted_here
+            if deleted_here:
+                click.echo(f"✓ {ll.id} {ll.name!r}: removed {deleted_here} duplicate(s)")
+
+        if apply:
+            click.echo(f"\nDone. Removed {total_deleted} duplicate row(s).")
+            click.echo("Run `VACUUM (FULL, ANALYZE) assignment_logs;` afterward to reclaim disk.")
+        else:
+            click.echo("\nDry run complete. Re-run with --apply to delete.")
+
     return app
