@@ -23,10 +23,32 @@ from ..services.close_api import exchange_code_for_tokens, revoke_token, CloseCl
 auth_bp = Blueprint("auth", __name__)
 
 
+def _safe_next(raw):
+    """
+    Return `raw` only if it's a safe same-site path, else None. Guards against
+    open-redirects: we only ever redirect to relative paths on our own domain.
+    """
+    if not raw:
+        return None
+    if not raw.startswith("/") or raw.startswith("//") or "\\" in raw:
+        return None
+    return raw
+
+
 @auth_bp.route("/login")
 def login():
-    if current_user.is_authenticated:
+    next_url = _safe_next(request.args.get("next"))
+
+    # Already signed in with nowhere specific to go? Straight to the app. But if
+    # a `next` was given (e.g. the reconnect page asking for a fresh sign-in),
+    # run the OAuth flow anyway so tokens are refreshed and we land on `next`.
+    if current_user.is_authenticated and not next_url:
         return redirect(url_for("main.index"))
+
+    if next_url:
+        session["oauth_next"] = next_url
+    else:
+        session.pop("oauth_next", None)
 
     state = secrets.token_urlsafe(32)
     session["oauth_state"] = state
@@ -165,7 +187,7 @@ def _complete_login(token_data, close_user_id, close_org_id):
         flash("Your Robin access has been suspended because your Close membership is no longer active.", "error")
         return redirect(url_for("main.index"))
 
-    next_page = request.args.get("next")
+    next_page = _safe_next(session.pop("oauth_next", None))
     return redirect(next_page or url_for("main.index"))
 
 

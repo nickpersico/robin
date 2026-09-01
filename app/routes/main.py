@@ -1,6 +1,6 @@
 import logging
 
-from flask import Blueprint, jsonify, redirect, render_template, url_for
+from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -17,6 +17,35 @@ def index():
     if current_user.is_authenticated:
         return redirect(url_for("lead_lists.index"))
     return render_template("index.html")
+
+
+@main_bp.route("/2026-08-31-outage")
+def outage():
+    """
+    Reconnect landing page for the 2026-08-31 read-only-DB outage, which burned
+    stored Close tokens across affected orgs. Two states:
+      - default: explain + "Sign in with Close" (a fresh sign-in re-issues tokens)
+      - reconnected: shown after the sign-in round-trips back here, confirming the
+        org's Close connection works again, with a CTA into the app.
+    """
+    reconnected = request.args.get("reconnected") == "1" and current_user.is_authenticated
+
+    connection_ok = False
+    if reconnected:
+        # They just re-authed, so their own token is fresh — confirm the org as a
+        # whole now has a usable connection (any working member counts).
+        try:
+            from ..services.assignment_engine import _get_org_client
+            connection_ok = _get_org_client(current_user.close_org_id) is not None
+        except Exception:
+            logger.exception("outage page: connection check failed")
+            connection_ok = True  # they re-authed; don't block the success state on a flaky check
+
+    return render_template(
+        "outage.html",
+        reconnected=reconnected,
+        connection_ok=connection_ok,
+    )
 
 
 @main_bp.route("/healthz")

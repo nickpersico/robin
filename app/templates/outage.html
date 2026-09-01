@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{% if reconnected %}You're all set{% else %}Reconnect Robin{% endif %}{% endblock %}
+
+{% block public_topbar %}{% endblock %}
+
+{% block content %}
+<div class="error-page">
+  <img src="{{ url_for('static', filename='img/robin-logo.png') }}" alt="Robin">
+
+  {% if reconnected %}
+    {# ── Success state ─────────────────────────────────────────────────── #}
+    <p class="error-eyebrow">Reconnected</p>
+    <h1>You're all set</h1>
+    <p class="error-tagline">The faithful distributor is back on the job.</p>
+    <p class="error-detail">
+      Robin is reconnected to Close and syncing again. Any leads that arrived
+      during the disruption will be assigned automatically on the next check —
+      nothing was lost.
+    </p>
+    {% if not connection_ok %}
+    <div class="help-callout" style="max-width:440px; margin-top:1rem;">
+      It can take a few minutes for syncing to fully resume. If lead assignment
+      doesn't pick back up shortly, try signing in once more.
+    </div>
+    {% endif %}
+    <div class="error-actions">
+      <a href="{{ url_for('main.index') }}" class="btn btn-primary">Go to Robin</a>
+    </div>
+
+  {% else %}
+    {# ── Explain / reconnect state ─────────────────────────────────────── #}
+    <p class="error-eyebrow">Service update · August 31, 2026</p>
+    <h1>Reconnect Robin to Close</h1>
+    <p class="error-tagline">A quick sign-in and Robin is back to distributing your leads.</p>
+    <p class="error-detail">
+      A brief service disruption reset Robin's connection to your Close account,
+      which pauses automatic lead assignment. Reconnecting takes one click, and
+      <strong>no data was lost</strong> — any leads from the disruption will be
+      picked up automatically once you're back.
+    </p>
+    <div class="error-actions">
+      <a href="{{ url_for('auth.login', next=url_for('main.outage', reconnected=1)) }}"
+         class="btn-close-signin">
+        <img src="{{ url_for('static', filename='img/close-mark.svg') }}" alt="">
+        Sign in with Close
+      </a>
+    </div>
+    <p class="error-detail" style="font-size:0.85rem; margin-top:1.25rem; color:var(--text-muted);">
+      Any teammate on your account can reconnect — it doesn't have to be you.
+    </p>
+  {% endif %}
+</div>
+{% endblock %}
