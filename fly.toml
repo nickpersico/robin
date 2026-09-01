@@ -17,8 +17,15 @@ primary_region = 'iad'
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = 'suspend'
-  auto_start_machines = true
+  # Keep the machine always running instead of suspending it when idle.
+  # Suspend/resume adds cold-start latency to the first request after a quiet
+  # period, and a suspended machine also freezes the in-process poll scheduler
+  # (so 5-minute polls are missed while idle). For a small always-on service
+  # this is the right trade. NOTE: the scheduler runs inside the web process,
+  # so run exactly ONE machine (fly scale count 1) until the scheduler is moved
+  # to its own process — two always-on machines would poll Close twice.
+  auto_stop_machines = 'off'
+  auto_start_machines = false
   min_machines_running = 1
   processes = ['app']
 
