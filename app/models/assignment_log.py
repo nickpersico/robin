@@ -17,6 +17,13 @@ class AssignmentLog(db.Model):
 
     __tablename__ = "assignment_logs"
 
+    __table_args__ = (
+        # Activity Log orders/filters by assigned_at.
+        db.Index("ix_assignment_logs_assigned_at", "assigned_at"),
+        # De-dup / retention and per-lead lookups scan by (queue_id, close_lead_id).
+        db.Index("ix_assignment_logs_queue_lead", "queue_id", "close_lead_id"),
+    )
+
     id = db.Column(db.String(20), primary_key=True, default=lambda: generate_id("al"))
     # DB column / FK still names the column queue_id for back-compat.
     queue_id = db.Column(
