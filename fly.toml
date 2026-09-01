@@ -3,6 +3,14 @@ primary_region = 'iad'
 
 [build]
 
+[deploy]
+  # Run migrations in a one-off release machine BEFORE the new version goes
+  # live. If a migration fails (e.g. the DB is read-only), the deploy aborts
+  # and the current version keeps serving — instead of the app crash-looping
+  # on boot. A no-op upgrade (DB already at head) performs no write, so deploys
+  # without pending migrations still succeed even if the DB is read-only.
+  release_command = "flask db upgrade"
+
 [env]
   FLASK_APP = 'run.py'
 

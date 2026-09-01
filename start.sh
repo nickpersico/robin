@@ -1,8 +1,10 @@
 #!/bin/sh
 set -e
 
-echo "Running database migrations..."
-flask db upgrade
+# NOTE: migrations run via Fly's release_command (see fly.toml), NOT here.
+# Running them in the boot path meant a failed migration crash-looped every
+# machine into a total outage; as a release_command a failure aborts the
+# deploy and the previous version keeps serving.
 
 echo "Starting gunicorn..."
 exec gunicorn \
