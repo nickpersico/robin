@@ -800,7 +800,9 @@ tr:last-child td { border-bottom: none; }
   text-align: center;
   padding: 2.5rem 1.5rem;
 }
-.error-page img {
+/* Direct child only — the hero logo. Guard against sizing nested images such
+   as the Close mark inside a "Sign in with Close" button. */
+.error-page > img {
   width: 88px;
   height: 88px;
   border-radius: 18px;
