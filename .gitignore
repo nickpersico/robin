@@ -23,3 +23,6 @@ instance/
 
 # Claude project memory
 .claude/
+
+# Internal incident records — local only, never publish (this is a public repo)
+INCIDENT-*.md
