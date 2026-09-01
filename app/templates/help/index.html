@@ -152,6 +152,7 @@
     <a href="#lead-lists-seeding" class="sub">Seeding</a>
     <a href="#groups">Groups</a>
     <a href="#assignment-engine">Assignment engine</a>
+    <a href="#sync-connection" class="sub">Which connection Robin uses</a>
     <a href="#activity-log">Activity Log</a>
     <a href="#organizations">Organizations &amp; users</a>
     <a href="#edge-cases">Common situations</a>
@@ -161,6 +162,7 @@
     <a href="#edge-run-as-no-email" class="sub">Workflow has no email account</a>
     <a href="#edge-new-users" class="sub">New users joining</a>
     <a href="#edge-inactive-members" class="sub">Deactivating a member</a>
+    <a href="#edge-reconnect" class="sub">Reconnecting to Close</a>
     <a href="#support">Support</a>
   </nav>
 
@@ -357,6 +359,26 @@
       on a Lead List detail page — this runs the same logic outside the 5-minute schedule.
     </p>
 
+    <h3 id="sync-connection">Which connection Robin uses</h3>
+    <p>
+      Robin syncs each organization through a team member's <strong>Close connection</strong> —
+      the OAuth link created when someone signs in. By default it uses the connection of the
+      first active member to join.
+    </p>
+    <p>
+      If that connection ever stops working — a member revokes Robin's access in Close, or their
+      connection expires — Robin <strong>automatically falls back to the next active member</strong>
+      whose connection still works, and keeps syncing. You don't have to do anything, and it
+      doesn't matter which member's connection powers the sync; the results are identical.
+    </p>
+    <div class="help-callout">
+      <strong>Keeping more than one admin signed in makes your org more resilient.</strong>
+      If every active member's connection is broken at once, Robin can't reach Close for that
+      org and pauses assignments until someone reconnects — see
+      <a href="#edge-reconnect">Reconnecting Robin to Close</a>. No leads are lost in the
+      meantime; they're picked up once the connection is restored.
+    </div>
+
     {# ── Activity Log ── #}
     <h2 id="activity-log">Activity Log</h2>
     <p>
@@ -514,6 +536,25 @@
       temporary absences like vacation or sick days. For short-term absences,
       remove the user from the Group and add them back afterward.
     </p>
+
+    <h3 id="edge-reconnect">Reconnecting Robin to Close</h3>
+    <p>
+      Robin's connection to Close occasionally needs to be re-established — for example if a
+      member revoked Robin's access, or after a rare service disruption. While an organization
+      has no working connection, Robin can't assign new leads for it.
+    </p>
+    <p>
+      To reconnect, any active team member simply <strong>signs in to Robin again</strong> with
+      Close. That restores the connection, and syncing resumes on the next poll (within
+      ~5&nbsp;minutes). Robin only advances its place in your leads once work is successfully
+      recorded, so <strong>no leads are skipped</strong> — anything that arrived while the
+      connection was down is picked up automatically once it's back.
+    </p>
+    <div class="help-callout info">
+      Robin can sync using <em>any</em> active member's connection and falls back between them
+      automatically (see <a href="#sync-connection">Which connection Robin uses</a>), so this
+      only requires attention in the rare case where every member's connection has lapsed.
+    </div>
 
     {# ── Support ── #}
     <h2 id="support">Support</h2>

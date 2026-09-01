@@ -288,11 +288,11 @@ def create_app(config_class=Config):
         reseeding — a list with actionable=0 is safe to leave alone.
         """
         from .models.lead_list import LeadList, STATUS_ACTIVE
-        from .services.close_api import CloseClient, CloseAPIError
+        from .services.close_api import CloseAPIError
         from .services.assignment_engine import (
             _normalize_filter,
             _inject_date_filter,
-            _get_org_user,
+            _get_org_client,
         )
 
         q = LeadList.query.filter_by(status=STATUS_ACTIVE)
@@ -311,12 +311,11 @@ def create_app(config_class=Config):
 
         for ll in lists:
             try:
-                org_user = _get_org_user(ll.close_org_id)
-                if not org_user:
-                    click.echo(f"! {ll.id} {ll.name!r} — no active user for org, skipped")
+                client = _get_org_client(ll.close_org_id)
+                if client is None:
+                    click.echo(f"! {ll.id} {ll.name!r} — no usable Close connection for org, skipped")
                     continue
 
-                client = CloseClient(org_user)
                 after_dt = ll.last_checked_at or ll.created_at
                 search_query = _inject_date_filter(
                     _normalize_filter(ll.filters_json), after_dt
