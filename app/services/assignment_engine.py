@@ -2,8 +2,10 @@
 Assignment engine — polls Close for new leads and runs each Lead List's actions.
 
 Called by APScheduler every 5 minutes. For each active ongoing Lead List:
-  1. Query Close's search API for leads created since last_checked_at that
-     match the list's filter conditions.
+  1. Query Close's search API for leads that match the list's filter
+     conditions and were created since the list's checkpoint (last_checked_at),
+     minus a short overlap window, oldest first. Leads this list already
+     acted on are skipped.
   2. For each matching lead, run the list's enabled Actions:
        * Assign — pick the next member of the list's Group (Rotation) and
          write that user's ID into the configured custom field. Advance the
@@ -12,13 +14,15 @@ Called by APScheduler every 5 minutes. For each active ongoing Lead List:
          first contact.
   3. Log the event(s) in AssignmentLog (denormalized so the UI can render
      history without API calls).
-  4. Save the current timestamp as last_checked_at.
+  4. Advance last_checked_at to the poll's start time, unless some leads still
+     need another pass (backlog over the per-poll cap, or failed actions); then
+     hold it back so the next poll sees them again.
 """
 
 import copy
 import logging
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Iterable, List, Optional, Set, Tuple
 
 from ..extensions import db
 from ..models.lead_list import LeadList, TYPE_ONGOING, STATUS_ACTIVE
@@ -36,6 +40,36 @@ logger = logging.getLogger(__name__)
 # big backlog from monopolising a poll cycle or hammering Close all at once.
 MAX_ACTIONS_PER_POLL = 500
 
+# Each poll's date window reaches this far back before the checkpoint. It covers
+# two gaps that a hard "created after the last poll" cutoff would fall into:
+#   * a lead created just before a poll that only starts matching the filter a
+#     few seconds later (e.g. created, then its status is set), and
+#   * Close's search index lagging slightly behind writes.
+# Leads in the overlap that this list already acted on are skipped via
+# AssignmentLog, so the overlap never causes a double assignment.
+POLL_OVERLAP = timedelta(minutes=10)
+
+# How long a lead whose action failed (Close error, no active rotation members)
+# may hold the checkpoint back so later polls retry it. Bounded so one
+# permanently failing lead can't pin the window open forever.
+MAX_RETRY_HOLDBACK = timedelta(hours=6)
+
+# Close's search cursor fails past 10,000 results, so an unbounded search over
+# a huge window (a giant import, or a long retry hold-back) would fail on every
+# poll and stall the list. Instead a poll searches in oldest-first chunks of at
+# most MAX_SEARCH_RESULTS, each starting at the previous chunk's last
+# date_created, until it has a full poll's worth of leads to act on or has
+# walked MAX_SEARCH_CHUNKS chunks.
+MAX_SEARCH_RESULTS = 5000
+MAX_SEARCH_CHUNKS = 10
+
+# Process leads oldest-first so that when a poll stops at MAX_ACTIONS_PER_POLL,
+# everything before the stopping point is done and the rest is still ahead.
+SORT_OLDEST_FIRST = [{
+    "direction": "asc",
+    "field": {"object_type": "lead", "type": "regular_field", "field_name": "date_created"},
+}]
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -51,17 +85,26 @@ def _normalize_filter(filters_json: dict) -> dict:
     return filters_json
 
 
-def _inject_date_filter(filters_json: dict, after_dt: Optional[datetime]) -> dict:
-    """Return a new filter dict that ANDs in date_created > after_dt."""
-    after_str = (
-        after_dt.strftime("%Y-%m-%dT%H:%M:%S.%f+00:00")
-        if after_dt
-        else "1970-01-01T00:00:00.000000+00:00"
-    )
+def _inject_date_filter(filters_json: dict, on_or_after: Optional[datetime]) -> dict:
+    """
+    Return a new filter dict that ANDs in date_created >= on_or_after (naive UTC).
+
+    Close's moment_range takes `on_or_after` / `before`, each a moment object
+    such as {"type": "fixed_utc", "value": ...}. Close silently ignores keys it
+    doesn't recognise, so a malformed condition (this used to send
+    {"after": "<string>"}) quietly turns into "no date filter at all".
+    """
+    start = on_or_after or datetime(1970, 1, 1)
     date_condition = {
         "type": "field_condition",
         "field": {"type": "regular_field", "field_name": "date_created", "object_type": "lead"},
-        "condition": {"type": "moment_range", "after": after_str},
+        "condition": {
+            "type": "moment_range",
+            "on_or_after": {
+                "type": "fixed_utc",
+                "value": start.strftime("%Y-%m-%dT%H:%M:%S.%f+00:00"),
+            },
+        },
     }
 
     base = copy.deepcopy(filters_json)
@@ -131,19 +174,153 @@ def _list_org_id(lead_list: LeadList) -> Optional[str]:
     return None
 
 
+def _parse_close_datetime(value) -> Optional[datetime]:
+    """Parse a Close ISO timestamp into a naive UTC datetime (None if unparseable)."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _poll_window_start(lead_list: LeadList) -> datetime:
+    """Earliest date_created the next poll of this list will consider."""
+    checkpoint = lead_list.last_checked_at or lead_list.created_at
+    return checkpoint - POLL_OVERLAP
+
+
+def _next_checkpoint(
+    now: datetime,
+    backlog_from: Optional[datetime],
+    retry_from: Optional[datetime],
+) -> datetime:
+    """
+    Where to put a list's checkpoint after a poll that started at `now`.
+
+    Normally `now`. If leads still need another pass, hold it back so the next
+    poll's window (which starts POLL_OVERLAP before the checkpoint) starts
+    exactly at the earliest of them, not a further POLL_OVERLAP earlier, so
+    a held window never re-walks more already-done leads than it must:
+      * backlog (over the per-poll cap or the search cap): held back as far as
+        needed, since that backlog must be drained;
+      * failed leads: held back at most MAX_RETRY_HOLDBACK, so a lead that
+        keeps failing eventually stops pinning the window.
+    Never later than `now`. Already-actioned leads in a re-scanned window are
+    skipped via AssignmentLog.
+    """
+    hold = backlog_from
+    if retry_from is not None:
+        retry_hold = max(retry_from, now - MAX_RETRY_HOLDBACK)
+        hold = retry_hold if hold is None else min(hold, retry_hold)
+    if hold is None:
+        return now
+    return min(now, hold + POLL_OVERLAP)
+
+
+def _already_actioned_lead_ids(lead_list_id: str, lead_ids: Iterable[str]) -> Set[str]:
+    """Which of these leads this list has already acted on (has an AssignmentLog row)."""
+    ids = [i for i in lead_ids if i]
+    done: Set[str] = set()
+    chunk = 500
+    for start in range(0, len(ids), chunk):
+        rows = (
+            db.session.query(AssignmentLog.close_lead_id)
+            .filter(
+                AssignmentLog.queue_id == lead_list_id,
+                AssignmentLog.close_lead_id.in_(ids[start:start + chunk]),
+            )
+            .all()
+        )
+        done.update(r[0] for r in rows)
+    return done
+
+
+def find_poll_candidates(
+    client, lead_list: LeadList
+) -> Tuple[List[dict], datetime, Optional[datetime]]:
+    """
+    Run the search a poll of this list would run and return
+    (candidate leads oldest-first, window start, resume_from).
+
+    Candidates match the list's filter, were created inside the poll window,
+    and are neither in the list's seeded snapshot nor already acted on by this
+    list. resume_from is set when the search stopped before reaching the end
+    of the window: it's the date_created where the next poll must pick up.
+    Raises CloseAPIError if the search fails.
+    """
+    window_start = _poll_window_start(lead_list)
+    base_filter = _normalize_filter(lead_list.filters_json)
+
+    # Explicitly request the target custom field so it comes back in the result
+    # (as a flat "custom.<id>" key) and the "field already set" guard can see it.
+    search_fields = ["id", "display_name", "date_created", "custom"]
+    if lead_list.custom_field_id:
+        search_fields.append(f"custom.{lead_list.custom_field_id}")
+
+    seeded = set(lead_list.seeded_lead_ids or [])
+    candidates: List[dict] = []
+    candidate_ids: Set[str] = set()
+    resume_from: Optional[datetime] = None
+    chunk_start = window_start
+
+    for _ in range(MAX_SEARCH_CHUNKS):
+        chunk = client.search_leads(
+            _inject_date_filter(base_filter, chunk_start),
+            fields=search_fields, sort=SORT_OLDEST_FIRST, max_results=MAX_SEARCH_RESULTS,
+        )
+        fresh = [l for l in chunk
+                 if l.get("id") and l["id"] not in seeded and l["id"] not in candidate_ids]
+        done = _already_actioned_lead_ids(lead_list.id, [l["id"] for l in fresh])
+        for lead in fresh:
+            if lead["id"] not in done:
+                candidates.append(lead)
+                candidate_ids.add(lead["id"])
+
+        if len(chunk) < MAX_SEARCH_RESULTS:
+            resume_from = None   # reached the end of the window
+            break
+        last_created = _parse_close_datetime(chunk[-1].get("date_created"))
+        if last_created is None or last_created <= chunk_start:
+            # A full chunk sharing one timestamp: we can't page past it by date.
+            logger.warning("LeadList %s: %d+ leads share date_created %s — cannot page further",
+                           lead_list.id, MAX_SEARCH_RESULTS, chunk_start)
+            resume_from = None
+            break
+        # The next chunk starts at (not after) the last timestamp, so leads that
+        # share it aren't skipped; candidate_ids drops the repeats.
+        chunk_start = resume_from = last_created
+        if len(candidates) >= MAX_ACTIONS_PER_POLL:
+            break
+
+    return candidates, window_start, resume_from
+
+
 # ---------------------------------------------------------------------------
 # Seeding
 # ---------------------------------------------------------------------------
 
 def seed_queue(lead_list_id: str):
     """
-    Snapshot all leads currently matching the list's filter so the engine
-    never acts on them — they pre-existed the list's creation/resume.
+    (Re)start a list from "now", so the engine never acts on leads that
+    existed before the list was created, resumed, or had its filter changed.
+
+    Polls only look at leads created after the checkpoint (minus
+    POLL_OVERLAP), so moving the checkpoint to now excludes everything older.
+    The leads that already match inside the overlap window are snapshotted
+    into seeded_lead_ids so the next poll's overlap doesn't pick them up.
     Must be called inside a Flask app context.
     """
     lead_list = db.session.get(LeadList, lead_list_id)
     if lead_list is None or not lead_list.filters_json:
         return
+
+    now = datetime.utcnow()
+    lead_list.last_checked_at = now
+    db.session.commit()
 
     org_id = _list_org_id(lead_list)
     if not org_id:
@@ -157,14 +334,18 @@ def seed_queue(lead_list_id: str):
         return
 
     try:
-        existing = client.search_leads(_normalize_filter(lead_list.filters_json))
+        recent = client.search_leads(
+            _inject_date_filter(_normalize_filter(lead_list.filters_json), now - POLL_OVERLAP),
+            fields=["id"],
+        )
     except CloseAPIError as e:
         logger.error("seed_queue %s: search failed: %s", lead_list_id, e)
         return
 
-    lead_list.seeded_lead_ids = [lead["id"] for lead in existing]
+    lead_list.seeded_lead_ids = [lead["id"] for lead in recent if lead.get("id")]
     db.session.commit()
-    logger.info("seed_queue %s: seeded %d lead(s)", lead_list_id, len(lead_list.seeded_lead_ids))
+    logger.info("seed_queue %s: checkpoint reset to %s, seeded %d recent lead(s)",
+                lead_list_id, now, len(lead_list.seeded_lead_ids))
 
 
 # ---------------------------------------------------------------------------
@@ -340,33 +521,41 @@ def poll_queue(lead_list_id: str) -> dict:
                 lead_list_id, e,
             )
 
-    after_dt = lead_list.last_checked_at or lead_list.created_at
-    search_query = _inject_date_filter(_normalize_filter(lead_list.filters_json), after_dt)
-
-    # Explicitly request the target custom field so it comes back in the result
-    # (as a flat "custom.<id>" key) and the "field already set" guard can see it.
-    search_fields = ["id", "display_name", "custom"]
-    if lead_list.custom_field_id:
-        search_fields.append(f"custom.{lead_list.custom_field_id}")
-
     try:
-        leads = client.search_leads(search_query, fields=search_fields)
+        leads, window_start, resume_from = find_poll_candidates(client, lead_list)
     except CloseAPIError as e:
         logger.error("LeadList %s: search failed: %s", lead_list_id, e)
         return {"error": str(e)}
 
-    seeded = set(lead_list.seeded_lead_ids or [])
-    leads = [l for l in leads if l.get("id") not in seeded]
-
-    logger.info("LeadList %s '%s': found %d lead(s) since %s (%d seeded/skipped)",
-                lead_list_id, lead_list.name, len(leads), after_dt, len(seeded))
+    logger.info("LeadList %s '%s': found %d new lead(s) created since %s",
+                lead_list_id, lead_list.name, len(leads), window_start)
 
     assigned = workflow_triggered = skipped = errors = 0
     actions = 0          # leads we actually acted on this cycle (assign/workflow)
     capped = False       # True if we stopped early at MAX_ACTIONS_PER_POLL
     sender_cache: dict = {}  # memoized run-as resolution per poll cycle
 
-    for lead in leads:
+    # Earliest date_created among leads a later poll must see again:
+    #   backlog_from: leads past MAX_ACTIONS_PER_POLL, or past the search's
+    #                 MAX_SEARCH_RESULTS cap (resume_from)
+    #   retry_from:   leads whose action failed (retried for MAX_RETRY_HOLDBACK)
+    backlog_from: Optional[datetime] = resume_from
+    retry_from: Optional[datetime] = None
+    if resume_from is not None:
+        logger.info("LeadList %s: search stopped before the end of the window — "
+                    "continuing from %s next cycle", lead_list_id, resume_from)
+
+    def _created(lead: dict) -> datetime:
+        # Unparseable timestamps fall back to the window start, which keeps
+        # the lead inside the next poll's window.
+        return _parse_close_datetime(lead.get("date_created")) or window_start
+
+    def _hold_for_retry(lead: dict):
+        nonlocal retry_from
+        created = _created(lead)
+        retry_from = created if retry_from is None else min(retry_from, created)
+
+    for index, lead in enumerate(leads):
         lead_id = lead.get("id", "")
         lead_name = lead.get("display_name", "")
 
@@ -379,11 +568,15 @@ def poll_queue(lead_list_id: str) -> dict:
                 logger.error("LeadList %s: assign failed for %s: %s",
                              lead_list_id, lead_id, assign_result["error"])
                 errors += 1
+                _hold_for_retry(lead)
                 # Don't trigger the workflow if assignment errored unexpectedly.
                 continue
             if assign_result.get("skipped_reason") == "no_active_members":
                 logger.warning("LeadList %s: rotation has no active members — stopping",
                                lead_list_id)
+                # Leads are oldest-first, so this one and everything after it
+                # still need assigning once a member is active again.
+                _hold_for_retry(lead)
                 break
             if assign_result.get("skipped_reason") == "field_already_set":
                 skipped += 1
@@ -397,6 +590,7 @@ def poll_queue(lead_list_id: str) -> dict:
                              lead_list_id, lead_id, run_as["error"])
                 if not assigned_member:
                     errors += 1
+                    _hold_for_retry(lead)
                     continue
                 # Assignment succeeded — fall through so the assign log is recorded.
                 workflow_result = None
@@ -407,6 +601,7 @@ def poll_queue(lead_list_id: str) -> dict:
                                  lead_list_id, lead_id, workflow_result["error"])
                     if not assigned_member:
                         errors += 1
+                        _hold_for_retry(lead)
                         continue
 
         member = (assign_result or {}).get("member") if assign_result else None
@@ -441,25 +636,25 @@ def poll_queue(lead_list_id: str) -> dict:
 
         actions += 1
         if actions >= MAX_ACTIONS_PER_POLL:
-            capped = True
-            logger.info(
-                "LeadList %s: hit the per-poll cap of %d — leaving the checkpoint "
-                "and continuing next cycle", lead_list_id, MAX_ACTIONS_PER_POLL,
-            )
+            if index + 1 < len(leads):
+                capped = True
+                next_created = _created(leads[index + 1])
+                backlog_from = next_created if backlog_from is None else min(backlog_from, next_created)
+                logger.info(
+                    "LeadList %s: hit the per-poll cap of %d — %d lead(s) left for "
+                    "the next cycle", lead_list_id, MAX_ACTIONS_PER_POLL,
+                    len(leads) - index - 1,
+                )
             break
 
-    # Only advance the checkpoint when we drained everything this cycle. If we
-    # hit the cap, leave last_checked_at where it is so the next poll re-scans
-    # and continues — already-actioned leads are skipped by the guard, so
-    # nothing is redone.
-    if not capped:
-        lead_list.last_checked_at = now
+    lead_list.last_checked_at = _next_checkpoint(now, backlog_from, retry_from)
     db.session.commit()
 
     logger.info(
-        "LeadList %s done — assigned: %d, workflow: %d, skipped: %d, errors: %d%s",
+        "LeadList %s done — assigned: %d, workflow: %d, skipped: %d, errors: %d%s%s",
         lead_list_id, assigned, workflow_triggered, skipped, errors,
         " (capped, more next cycle)" if capped else "",
+        " (failed leads will be retried)" if retry_from is not None else "",
     )
     return {
         "assigned": assigned,

@@ -27,6 +27,9 @@ _RATELIMIT_MAX_WAIT = 30.0      # cap a single wait so a poll can't hang
 # up and surface the 429 instead of sleeping further.
 _RATELIMIT_MAX_TOTAL_WAIT = 45.0
 
+# Page size for /data/search/ (Close's maximum).
+SEARCH_PAGE_SIZE = 200
+
 # (connect, read) timeout for every Close HTTP call. Without this, a stalled
 # Close connection holds the worker thread until gunicorn's 120s timeout
 # kills it — surfacing as an unexplained Internal Server Error.
@@ -391,22 +394,43 @@ class CloseClient:
         """Fetch a single lead by ID."""
         return self._get(f"/lead/{lead_id}/")
 
-    def search_leads(self, query: dict, fields: Optional[List[str]] = None) -> List[dict]:
+    def search_leads(
+        self,
+        query: dict,
+        fields: Optional[List[str]] = None,
+        sort: Optional[List[dict]] = None,
+        max_results: Optional[int] = None,
+    ) -> List[dict]:
         """
         Run a search against the Close Advanced Filtering API and return all
         matching leads, handling cursor-based pagination automatically.
 
         `query` is the Close filter JSON (e.g. {"type": "and", "queries": [...]}).
         `fields` is an optional list of lead fields to include in results.
+        `sort` is an optional Close sort spec. Without one, Close orders by
+        date_updated descending.
+
+        `max_results` caps the total number of results (Close's `results_limit`).
+
+        Note on paging: `_limit` is the page size; `results_limit` caps the
+        *total*. Only cap the total together with a deterministic sort and a
+        way to resume after the last result: an unsorted search capped at 200
+        once silently hid every match past the 200 most recently updated.
+        Close's cursor also stops working past 10,000 results, so very large
+        searches need a cap.
         """
         requested_fields = fields or ["id", "display_name", "custom"]
         body = {
             "object_type": "lead",
             "query": query,
             "_fields": {"lead": requested_fields},
-            "results_limit": 200,
+            "_limit": SEARCH_PAGE_SIZE,
             "cursor": None,
         }
+        if sort:
+            body["sort"] = sort
+        if max_results:
+            body["results_limit"] = max_results
 
         leads = []
         while True:

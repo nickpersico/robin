@@ -278,7 +278,8 @@ def create_app(config_class=Config):
         right now — without touching anything.
 
         Runs the same Close search poll_queue would run, then reports:
-          - matches:     unseeded leads created since last_checked_at
+          - matches:     leads in the poll window that are neither seeded nor
+                         already acted on by the list
           - would_skip:  matches whose target custom field is already set
                          (only counted when overwrite_existing is False,
                           since those get skipped by the engine)
@@ -290,9 +291,9 @@ def create_app(config_class=Config):
         from .models.lead_list import LeadList, STATUS_ACTIVE
         from .services.close_api import CloseAPIError
         from .services.assignment_engine import (
-            _normalize_filter,
-            _inject_date_filter,
             _get_org_client,
+            _lead_custom_value,
+            find_poll_candidates,
         )
 
         q = LeadList.query.filter_by(status=STATUS_ACTIVE)
@@ -316,14 +317,10 @@ def create_app(config_class=Config):
                     click.echo(f"! {ll.id} {ll.name!r} — no usable Close connection for org, skipped")
                     continue
 
-                after_dt = ll.last_checked_at or ll.created_at
-                search_query = _inject_date_filter(
-                    _normalize_filter(ll.filters_json), after_dt
-                )
-                leads = client.search_leads(search_query)
-
-                seeded = set(ll.seeded_lead_ids or [])
-                unseeded = [l for l in leads if l.get("id") not in seeded]
+                unseeded, after_dt, resume_from = find_poll_candidates(client, ll)
+                # The search stops once it has a poll's worth of leads, so a
+                # resume point means the true count is higher.
+                more = "+" if resume_from is not None else ""
 
                 would_skip = 0
                 if (
@@ -333,7 +330,7 @@ def create_app(config_class=Config):
                 ):
                     would_skip = sum(
                         1 for l in unseeded
-                        if (l.get("custom") or {}).get(ll.custom_field_id)
+                        if _lead_custom_value(l, ll.custom_field_id)
                     )
 
                 matches = len(unseeded)
@@ -352,7 +349,7 @@ def create_app(config_class=Config):
                 )
                 click.echo(
                     f"    since {after_dt.isoformat(timespec='seconds')}  "
-                    f"actions={action_str}  matches={matches}  "
+                    f"actions={action_str}  matches={matches}{more}  "
                     f"would_skip={would_skip}  actionable={actionable}"
                 )
 
@@ -416,7 +413,7 @@ def create_app(config_class=Config):
                 ll.status = STATUS_PAUSED
                 db.session.commit()
 
-                # 2. Re-seed: fetch every currently-matching lead and mark it seen.
+                # 2. Re-seed: move the checkpoint to now and mark recent matches seen.
                 seed_queue(ll.id)
 
                 # 3. Refresh from DB (seed_queue may have committed) and resume.
